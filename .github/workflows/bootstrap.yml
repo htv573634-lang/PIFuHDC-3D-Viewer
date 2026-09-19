@@ -31,25 +31,22 @@ jobs:
           java-version: "17"
 
       # ==========================================================
-      # CREATE PROJECT DIRECTORIES
+      # CREATE DIRECTORIES
       # ==========================================================
 
-      - name: Create project structure
-        shell: bash
+      - name: Create project directories
         run: |
           set -e
 
-          mkdir -p \
-            app/src/main/java/com/pifuhdc/viewer \
-            app/src/main/res/values \
-            .github/workflows
+          mkdir -p app/src/main/java/com/pifuhdc/viewer
+          mkdir -p app/src/main/res/values
+          mkdir -p .github/workflows
 
       # ==========================================================
       # SETTINGS
       # ==========================================================
 
       - name: Create settings.gradle.kts
-        shell: bash
         run: |
           cat > settings.gradle.kts <<'EOF'
           pluginManagement {
@@ -79,7 +76,6 @@ jobs:
       # ==========================================================
 
       - name: Create root build.gradle.kts
-        shell: bash
         run: |
           cat > build.gradle.kts <<'EOF'
           plugins {
@@ -93,13 +89,10 @@ jobs:
       # ==========================================================
 
       - name: Create gradle.properties
-        shell: bash
         run: |
           cat > gradle.properties <<'EOF'
           org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
-
           android.useAndroidX=true
-
           kotlin.code.style=official
           EOF
 
@@ -108,7 +101,6 @@ jobs:
       # ==========================================================
 
       - name: Create app/build.gradle.kts
-        shell: bash
         run: |
           cat > app/build.gradle.kts <<'EOF'
           plugins {
@@ -155,10 +147,7 @@ jobs:
           }
 
           dependencies {
-
-              implementation(
-                  "androidx.core:core-ktx:1.15.0"
-              )
+              implementation("androidx.core:core-ktx:1.15.0")
 
               implementation(
                   "com.google.android.filament:filament-android:1.76.1"
@@ -175,11 +164,10 @@ jobs:
           EOF
 
       # ==========================================================
-      # ANDROID MANIFEST
+      # MANIFEST
       # ==========================================================
 
       - name: Create AndroidManifest.xml
-        shell: bash
         run: |
           cat > app/src/main/AndroidManifest.xml <<'EOF'
           <?xml version="1.0" encoding="utf-8"?>
@@ -220,7 +208,6 @@ jobs:
       # ==========================================================
 
       - name: Create styles.xml
-        shell: bash
         run: |
           cat > app/src/main/res/values/styles.xml <<'EOF'
           <?xml version="1.0" encoding="utf-8"?>
@@ -255,7 +242,6 @@ jobs:
       # ==========================================================
 
       - name: Create MainActivity.kt
-        shell: bash
         run: |
           cat > app/src/main/java/com/pifuhdc/viewer/MainActivity.kt <<'EOF'
           package com.pifuhdc.viewer
@@ -304,10 +290,7 @@ jobs:
                       ) {
 
                           if (::modelViewer.isInitialized) {
-
-                              modelViewer.render(
-                                  frameTimeNanos
-                              )
+                              modelViewer.render(frameTimeNanos)
                           }
 
                           Choreographer
@@ -383,7 +366,6 @@ jobs:
                               "OPEN GLB"
 
                           setOnClickListener {
-
                               openGlbPicker()
                           }
                       }
@@ -472,9 +454,7 @@ jobs:
                       _,
                       event: MotionEvent ->
 
-                      modelViewer.onTouchEvent(
-                          event
-                      )
+                      modelViewer.onTouchEvent(event)
 
                       true
                   }
@@ -487,7 +467,7 @@ jobs:
               }
 
               // ======================================================
-              // FILE PICKER
+              // OPEN GLB
               // ======================================================
 
               private fun openGlbPicker() {
@@ -520,7 +500,7 @@ jobs:
               }
 
               // ======================================================
-              // FILE RESULT
+              // RESULT
               // ======================================================
 
               @Deprecated(
@@ -546,8 +526,7 @@ jobs:
                   }
 
                   val uri =
-                      data?.data
-                          ?: return
+                      data?.data ?: return
 
                   loadGlb(uri)
               }
@@ -583,9 +562,7 @@ jobs:
                           runOnUiThread {
 
                               modelViewer
-                                  .loadModelGlb(
-                                      buffer
-                                  )
+                                  .loadModelGlb(buffer)
 
                               modelViewer
                                   .transformToUnitCube()
@@ -613,7 +590,6 @@ jobs:
                               ).show()
                           }
                       }
-
                   }.start()
               }
 
@@ -658,7 +634,6 @@ jobs:
       # ==========================================================
 
       - name: Create .gitignore
-        shell: bash
         run: |
           cat > .gitignore <<'EOF'
           .gradle/
@@ -678,7 +653,6 @@ jobs:
       # ==========================================================
 
       - name: Download Gradle 8.9
-        shell: bash
         run: |
           set -e
 
@@ -690,47 +664,50 @@ jobs:
 
           test -x gradle-8.9/bin/gradle
 
-          echo "Gradle 8.9 ready"
-
       # ==========================================================
       # ANDROID SDK
       #
       # IMPORTANT:
-      # Do NOT install the obsolete "tools" package.
+      # No packages: multiline input.
+      # No obsolete "tools" package.
       # ==========================================================
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
-        with:
-          packages: |
-            platform-tools
-            platforms;android-35
-            build-tools;35.0.0
 
       # ==========================================================
       # ACCEPT LICENSES
       # ==========================================================
 
       - name: Accept Android licenses
-        shell: bash
         run: |
           yes | sdkmanager --licenses >/dev/null || true
+
+      # ==========================================================
+      # INSTALL REQUIRED SDK COMPONENTS
+      #
+      # Each package is a separate sdkmanager argument.
+      # ==========================================================
+
+      - name: Install Android SDK components
+        run: |
+          set -e
+
+          sdkmanager \
+            "platform-tools" \
+            "platforms;android-35" \
+            "build-tools;35.0.0"
 
       # ==========================================================
       # VERIFY SDK
       # ==========================================================
 
       - name: Verify Android SDK
-        shell: bash
         run: |
           set -e
 
           echo "ANDROID_HOME=$ANDROID_HOME"
           echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
-
-          echo
-          echo "Installed Android packages:"
-          sdkmanager --list_installed | head -100
 
           echo
           echo "Checking Android platform..."
@@ -748,21 +725,10 @@ jobs:
           echo "Android SDK verification OK"
 
       # ==========================================================
-      # GRADLE VERSION
-      # ==========================================================
-
-      - name: Verify Gradle
-        shell: bash
-        run: |
-          ./gradle-8.9/bin/gradle \
-            --version
-
-      # ==========================================================
-      # BUILD DEBUG APK
+      # BUILD
       # ==========================================================
 
       - name: Build Debug APK
-        shell: bash
         run: |
           set -e
 
@@ -776,7 +742,6 @@ jobs:
       # ==========================================================
 
       - name: Verify APK
-        shell: bash
         run: |
           set -e
 
@@ -788,38 +753,18 @@ jobs:
           echo "=========================================="
           echo "APK BUILD SUCCESS"
           echo "=========================================="
-          echo
 
           ls -lh "$APK"
 
           echo
-          echo "APK SHA256:"
+          echo "SHA256:"
           sha256sum "$APK"
-
-      # ==========================================================
-      # SHOW PROJECT
-      # ==========================================================
-
-      - name: Show generated project
-        shell: bash
-        run: |
-          echo "=========================================="
-          echo "GENERATED PROJECT"
-          echo "=========================================="
-
-          find . \
-            -maxdepth 5 \
-            -type f \
-            ! -path "./.git/*" \
-            ! -path "./gradle-8.9/*" \
-            | sort
 
       # ==========================================================
       # COMMIT PROJECT
       # ==========================================================
 
       - name: Commit generated project
-        shell: bash
         run: |
           set -e
 
@@ -834,23 +779,19 @@ jobs:
           git add .
 
           if git diff --cached --quiet; then
-
               echo "No changes to commit."
-
           else
-
               git commit \
                 -m "Bootstrap PIFuHDC 3D Viewer Android app"
 
               git push
-
           fi
 
       # ==========================================================
       # UPLOAD APK
       # ==========================================================
 
-      - name: Upload APK artifact
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: PIFuHDC-3D-Viewer-debug
