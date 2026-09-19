@@ -28,7 +28,7 @@ jobs:
 
       # ==========================================================
       # JAVA 17
-      # SAME PATTERN AS KNOWN-GREEN PROJECT
+      # SAME PATTERN AS KNOWN-GREEN REPO
       # ==========================================================
 
       - name: Setup Java 17
@@ -87,7 +87,7 @@ jobs:
       # ROOT BUILD
       # ==========================================================
 
-      - name: Create build.gradle.kts
+      - name: Create root build.gradle.kts
         shell: bash
         run: |
           cat > build.gradle.kts <<'EOF'
@@ -181,7 +181,7 @@ jobs:
           EOF
 
       # ==========================================================
-      # MANIFEST
+      # ANDROID MANIFEST
       # ==========================================================
 
       - name: Create AndroidManifest.xml
@@ -275,6 +275,7 @@ jobs:
           import android.view.MotionEvent
           import android.view.SurfaceView
           import android.view.ViewGroup
+          import android.view.WindowManager
           import android.widget.Button
           import android.widget.FrameLayout
           import android.widget.TextView
@@ -330,8 +331,7 @@ jobs:
                   super.onCreate(savedInstanceState)
 
                   window.addFlags(
-                      android.view.WindowManager
-                          .LayoutParams
+                      WindowManager.LayoutParams
                           .FLAG_KEEP_SCREEN_ON
                   )
 
@@ -493,7 +493,7 @@ jobs:
               }
 
               // ======================================================
-              // FILE PICKER
+              // OPEN GLB
               // ======================================================
 
               private fun openGlbPicker() {
@@ -526,7 +526,7 @@ jobs:
               }
 
               // ======================================================
-              // FILE RESULT
+              // RESULT
               // ======================================================
 
               @Deprecated(
@@ -677,11 +677,9 @@ jobs:
       # ==========================================================
       # ANDROID SDK
       #
-      # EXACT PATTERN USED BY YOUR GREEN PROJECT
+      # EXACT STRUCTURE FROM KNOWN-GREEN WORKFLOW
       #
-      # IMPORTANT:
-      # NO "packages:" INPUT
-      # NO "tools" PACKAGE
+      # DO NOT USE packages:
       # ==========================================================
 
       - name: Setup Android SDK
@@ -705,12 +703,32 @@ jobs:
 
       # ==========================================================
       # SETUP GRADLE
-      #
-      # SAME ACTION AS GREEN PROJECT
       # ==========================================================
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+
+      # ==========================================================
+      # CREATE GRADLE WRAPPER
+      #
+      # This makes the repository self-contained like
+      # the known-green project.
+      # ==========================================================
+
+      - name: Create Gradle wrapper
+        shell: bash
+        run: |
+          set -e
+
+          gradle wrapper \
+            --gradle-version 8.9 \
+            --distribution-type bin
+
+          chmod +x gradlew
+
+          ./gradlew --version
 
       # ==========================================================
       # VERIFY PROJECT
@@ -728,14 +746,15 @@ jobs:
           test -f app/src/main/AndroidManifest.xml
           test -f app/src/main/res/values/styles.xml
           test -f app/src/main/java/com/pifuhdc/viewer/MainActivity.kt
+          test -f gradlew
+          test -f gradle/wrapper/gradle-wrapper.properties
 
-          echo "Project files verified."
+          echo "=========================================="
+          echo "PROJECT FILES VERIFIED"
+          echo "=========================================="
 
       # ==========================================================
-      # BUILD
-      #
-      # gradle/actions/setup-gradle provides Gradle.
-      # Explicitly use 8.9 so this matches our project.
+      # BUILD DEBUG APK
       # ==========================================================
 
       - name: Build Debug APK
@@ -743,13 +762,11 @@ jobs:
         run: |
           set -e
 
-          gradle \
-            --version
+          chmod +x gradlew
 
-          gradle \
+          ./gradlew \
             --no-daemon \
             --stacktrace \
-            --gradle-version 8.9 \
             assembleDebug
 
       # ==========================================================
@@ -828,6 +845,7 @@ jobs:
       - name: Build Summary
         shell: bash
         run: |
+          echo
           echo "PIFuHDC 3D Viewer build completed."
           echo
           echo "APK:"
