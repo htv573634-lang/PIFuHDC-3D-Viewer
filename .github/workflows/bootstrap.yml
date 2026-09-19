@@ -28,15 +28,15 @@ jobs:
 
       # ==========================================================
       # JAVA 17
-      # SAME PATTERN AS KNOWN-GREEN REPO
+      # No Gradle cache here because the repository initially
+      # contains no Gradle files.
       # ==========================================================
 
       - name: Setup Java 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "17"
-          cache: gradle
 
       # ==========================================================
       # CREATE PROJECT DIRECTORIES
@@ -655,39 +655,15 @@ jobs:
           EOF
 
       # ==========================================================
-      # GITIGNORE
-      # ==========================================================
-
-      - name: Create .gitignore
-        shell: bash
-        run: |
-          cat > .gitignore <<'EOF'
-          .gradle/
-          build/
-          app/build/
-
-          local.properties
-
-          .idea/
-          *.iml
-
-          .DS_Store
-          EOF
-
-      # ==========================================================
       # ANDROID SDK
       #
-      # EXACT STRUCTURE FROM KNOWN-GREEN WORKFLOW
-      #
-      # DO NOT USE packages:
+      # IMPORTANT:
+      # No packages: input here.
+      # Each sdkmanager package is a separate argument.
       # ==========================================================
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
-
-      # ==========================================================
-      # INSTALL ANDROID SDK
-      # ==========================================================
 
       - name: Install Android SDK
         shell: bash
@@ -702,7 +678,7 @@ jobs:
             "build-tools;35.0.0"
 
       # ==========================================================
-      # SETUP GRADLE
+      # SETUP GRADLE 8.9
       # ==========================================================
 
       - name: Setup Gradle
@@ -712,9 +688,6 @@ jobs:
 
       # ==========================================================
       # CREATE GRADLE WRAPPER
-      #
-      # This makes the repository self-contained like
-      # the known-green project.
       # ==========================================================
 
       - name: Create Gradle wrapper
@@ -749,6 +722,7 @@ jobs:
           test -f gradlew
           test -f gradle/wrapper/gradle-wrapper.properties
 
+          echo
           echo "=========================================="
           echo "PROJECT FILES VERIFIED"
           echo "=========================================="
@@ -814,16 +788,12 @@ jobs:
           git add .
 
           if git diff --cached --quiet; then
-
               echo "No changes to commit."
-
           else
-
               git commit \
                 -m "Bootstrap PIFuHDC 3D Viewer Android app"
 
               git push
-
           fi
 
       # ==========================================================
@@ -839,14 +809,16 @@ jobs:
           retention-days: 14
 
       # ==========================================================
-      # SUMMARY
+      # FINAL SUMMARY
       # ==========================================================
 
       - name: Build Summary
         shell: bash
         run: |
           echo
-          echo "PIFuHDC 3D Viewer build completed."
+          echo "=========================================="
+          echo "PIFuHDC 3D VIEWER BUILD COMPLETED"
+          echo "=========================================="
           echo
           echo "APK:"
           ls -lh app/build/outputs/apk/debug/app-debug.apk
