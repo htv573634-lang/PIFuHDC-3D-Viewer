@@ -6,9 +6,13 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: pifuhdc-3d-viewer-bootstrap
+  cancel-in-progress: false
+
 jobs:
   bootstrap:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     timeout-minutes: 30
 
     steps:
@@ -19,9 +23,12 @@ jobs:
 
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       # ==========================================================
       # JAVA 17
+      # SAME PATTERN AS KNOWN-GREEN PROJECT
       # ==========================================================
 
       - name: Setup Java 17
@@ -29,24 +36,27 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
+          cache: gradle
 
       # ==========================================================
-      # CREATE DIRECTORIES
+      # CREATE PROJECT DIRECTORIES
       # ==========================================================
 
       - name: Create project directories
+        shell: bash
         run: |
           set -e
 
-          mkdir -p app/src/main/java/com/pifuhdc/viewer
-          mkdir -p app/src/main/res/values
-          mkdir -p .github/workflows
+          mkdir -p \
+            app/src/main/java/com/pifuhdc/viewer \
+            app/src/main/res/values
 
       # ==========================================================
       # SETTINGS
       # ==========================================================
 
       - name: Create settings.gradle.kts
+        shell: bash
         run: |
           cat > settings.gradle.kts <<'EOF'
           pluginManagement {
@@ -58,7 +68,9 @@ jobs:
           }
 
           dependencyResolutionManagement {
-              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+              repositoriesMode.set(
+                  RepositoriesMode.FAIL_ON_PROJECT_REPOS
+              )
 
               repositories {
                   google()
@@ -75,7 +87,8 @@ jobs:
       # ROOT BUILD
       # ==========================================================
 
-      - name: Create root build.gradle.kts
+      - name: Create build.gradle.kts
+        shell: bash
         run: |
           cat > build.gradle.kts <<'EOF'
           plugins {
@@ -89,6 +102,7 @@ jobs:
       # ==========================================================
 
       - name: Create gradle.properties
+        shell: bash
         run: |
           cat > gradle.properties <<'EOF'
           org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
@@ -101,6 +115,7 @@ jobs:
       # ==========================================================
 
       - name: Create app/build.gradle.kts
+        shell: bash
         run: |
           cat > app/build.gradle.kts <<'EOF'
           plugins {
@@ -147,7 +162,9 @@ jobs:
           }
 
           dependencies {
-              implementation("androidx.core:core-ktx:1.15.0")
+              implementation(
+                  "androidx.core:core-ktx:1.15.0"
+              )
 
               implementation(
                   "com.google.android.filament:filament-android:1.76.1"
@@ -168,6 +185,7 @@ jobs:
       # ==========================================================
 
       - name: Create AndroidManifest.xml
+        shell: bash
         run: |
           cat > app/src/main/AndroidManifest.xml <<'EOF'
           <?xml version="1.0" encoding="utf-8"?>
@@ -208,6 +226,7 @@ jobs:
       # ==========================================================
 
       - name: Create styles.xml
+        shell: bash
         run: |
           cat > app/src/main/res/values/styles.xml <<'EOF'
           <?xml version="1.0" encoding="utf-8"?>
@@ -242,6 +261,7 @@ jobs:
       # ==========================================================
 
       - name: Create MainActivity.kt
+        shell: bash
         run: |
           cat > app/src/main/java/com/pifuhdc/viewer/MainActivity.kt <<'EOF'
           package com.pifuhdc.viewer
@@ -289,8 +309,12 @@ jobs:
                           frameTimeNanos: Long
                       ) {
 
-                          if (::modelViewer.isInitialized) {
-                              modelViewer.render(frameTimeNanos)
+                          if (
+                              ::modelViewer.isInitialized
+                          ) {
+                              modelViewer.render(
+                                  frameTimeNanos
+                              )
                           }
 
                           Choreographer
@@ -315,7 +339,7 @@ jobs:
                       FrameLayout(this)
 
                   // ==================================================
-                  // 3D SURFACE
+                  // 3D VIEW
                   // ==================================================
 
                   surfaceView =
@@ -454,7 +478,9 @@ jobs:
                       _,
                       event: MotionEvent ->
 
-                      modelViewer.onTouchEvent(event)
+                      modelViewer.onTouchEvent(
+                          event
+                      )
 
                       true
                   }
@@ -467,7 +493,7 @@ jobs:
               }
 
               // ======================================================
-              // OPEN GLB
+              // FILE PICKER
               // ======================================================
 
               private fun openGlbPicker() {
@@ -500,7 +526,7 @@ jobs:
               }
 
               // ======================================================
-              // RESULT
+              // FILE RESULT
               // ======================================================
 
               @Deprecated(
@@ -608,7 +634,6 @@ jobs:
                   if (
                       ::modelViewer.isInitialized
                   ) {
-
                       modelViewer.destroy()
                   }
 
@@ -634,6 +659,7 @@ jobs:
       # ==========================================================
 
       - name: Create .gitignore
+        shell: bash
         run: |
           cat > .gitignore <<'EOF'
           .gradle/
@@ -649,49 +675,28 @@ jobs:
           EOF
 
       # ==========================================================
-      # DOWNLOAD GRADLE
-      # ==========================================================
-
-      - name: Download Gradle 8.9
-        run: |
-          set -e
-
-          wget -q \
-            https://services.gradle.org/distributions/gradle-8.9-bin.zip
-
-          unzip -q \
-            gradle-8.9-bin.zip
-
-          test -x gradle-8.9/bin/gradle
-
-      # ==========================================================
       # ANDROID SDK
       #
+      # EXACT PATTERN USED BY YOUR GREEN PROJECT
+      #
       # IMPORTANT:
-      # No packages: multiline input.
-      # No obsolete "tools" package.
+      # NO "packages:" INPUT
+      # NO "tools" PACKAGE
       # ==========================================================
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
       # ==========================================================
-      # ACCEPT LICENSES
+      # INSTALL ANDROID SDK
       # ==========================================================
 
-      - name: Accept Android licenses
-        run: |
-          yes | sdkmanager --licenses >/dev/null || true
-
-      # ==========================================================
-      # INSTALL REQUIRED SDK COMPONENTS
-      #
-      # Each package is a separate sdkmanager argument.
-      # ==========================================================
-
-      - name: Install Android SDK components
+      - name: Install Android SDK
+        shell: bash
         run: |
           set -e
+
+          yes | sdkmanager --licenses >/dev/null || true
 
           sdkmanager \
             "platform-tools" \
@@ -699,42 +704,52 @@ jobs:
             "build-tools;35.0.0"
 
       # ==========================================================
-      # VERIFY SDK
+      # SETUP GRADLE
+      #
+      # SAME ACTION AS GREEN PROJECT
       # ==========================================================
 
-      - name: Verify Android SDK
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      # ==========================================================
+      # VERIFY PROJECT
+      # ==========================================================
+
+      - name: Verify project
+        shell: bash
         run: |
           set -e
 
-          echo "ANDROID_HOME=$ANDROID_HOME"
-          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
+          test -f settings.gradle.kts
+          test -f build.gradle.kts
+          test -f gradle.properties
+          test -f app/build.gradle.kts
+          test -f app/src/main/AndroidManifest.xml
+          test -f app/src/main/res/values/styles.xml
+          test -f app/src/main/java/com/pifuhdc/viewer/MainActivity.kt
 
-          echo
-          echo "Checking Android platform..."
-
-          test -d \
-            "$ANDROID_SDK_ROOT/platforms/android-35"
-
-          echo
-          echo "Checking build tools..."
-
-          test -d \
-            "$ANDROID_SDK_ROOT/build-tools/35.0.0"
-
-          echo
-          echo "Android SDK verification OK"
+          echo "Project files verified."
 
       # ==========================================================
       # BUILD
+      #
+      # gradle/actions/setup-gradle provides Gradle.
+      # Explicitly use 8.9 so this matches our project.
       # ==========================================================
 
       - name: Build Debug APK
+        shell: bash
         run: |
           set -e
 
-          ./gradle-8.9/bin/gradle \
+          gradle \
+            --version
+
+          gradle \
             --no-daemon \
             --stacktrace \
+            --gradle-version 8.9 \
             assembleDebug
 
       # ==========================================================
@@ -742,6 +757,7 @@ jobs:
       # ==========================================================
 
       - name: Verify APK
+        shell: bash
         run: |
           set -e
 
@@ -751,8 +767,9 @@ jobs:
 
           echo
           echo "=========================================="
-          echo "APK BUILD SUCCESS"
+          echo "PIFuHDC 3D VIEWER APK BUILD SUCCESS"
           echo "=========================================="
+          echo
 
           ls -lh "$APK"
 
@@ -761,10 +778,11 @@ jobs:
           sha256sum "$APK"
 
       # ==========================================================
-      # COMMIT PROJECT
+      # COMMIT GENERATED PROJECT
       # ==========================================================
 
       - name: Commit generated project
+        shell: bash
         run: |
           set -e
 
@@ -779,22 +797,38 @@ jobs:
           git add .
 
           if git diff --cached --quiet; then
+
               echo "No changes to commit."
+
           else
+
               git commit \
                 -m "Bootstrap PIFuHDC 3D Viewer Android app"
 
               git push
+
           fi
 
       # ==========================================================
       # UPLOAD APK
       # ==========================================================
 
-      - name: Upload APK
+      - name: Upload Debug APK
         uses: actions/upload-artifact@v4
         with:
           name: PIFuHDC-3D-Viewer-debug
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
+
+      # ==========================================================
+      # SUMMARY
+      # ==========================================================
+
+      - name: Build Summary
+        shell: bash
+        run: |
+          echo "PIFuHDC 3D Viewer build completed."
+          echo
+          echo "APK:"
+          ls -lh app/build/outputs/apk/debug/app-debug.apk
