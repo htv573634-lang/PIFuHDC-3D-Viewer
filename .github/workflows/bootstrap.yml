@@ -12,18 +12,45 @@ jobs:
     timeout-minutes: 30
 
     steps:
+
+      # ==========================================================
+      # CHECKOUT
+      # ==========================================================
+
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      # ==========================================================
+      # JAVA 17
+      # ==========================================================
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      # ==========================================================
+      # CREATE PROJECT DIRECTORIES
+      # ==========================================================
 
       - name: Create project structure
         shell: bash
         run: |
           set -e
 
-          mkdir -p app/src/main/java/com/pifuhdc/viewer
-          mkdir -p app/src/main/res/values
-          mkdir -p .github/workflows
+          mkdir -p \
+            app/src/main/java/com/pifuhdc/viewer \
+            app/src/main/res/values \
+            .github/workflows
 
+      # ==========================================================
+      # SETTINGS
+      # ==========================================================
+
+      - name: Create settings.gradle.kts
+        shell: bash
+        run: |
           cat > settings.gradle.kts <<'EOF'
           pluginManagement {
               repositories {
@@ -47,6 +74,13 @@ jobs:
           include(":app")
           EOF
 
+      # ==========================================================
+      # ROOT BUILD
+      # ==========================================================
+
+      - name: Create root build.gradle.kts
+        shell: bash
+        run: |
           cat > build.gradle.kts <<'EOF'
           plugins {
               id("com.android.application") version "8.7.3" apply false
@@ -54,12 +88,28 @@ jobs:
           }
           EOF
 
+      # ==========================================================
+      # GRADLE PROPERTIES
+      # ==========================================================
+
+      - name: Create gradle.properties
+        shell: bash
+        run: |
           cat > gradle.properties <<'EOF'
           org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
+
           android.useAndroidX=true
+
           kotlin.code.style=official
           EOF
 
+      # ==========================================================
+      # APP BUILD
+      # ==========================================================
+
+      - name: Create app/build.gradle.kts
+        shell: bash
+        run: |
           cat > app/build.gradle.kts <<'EOF'
           plugins {
               id("com.android.application")
@@ -68,10 +118,12 @@ jobs:
 
           android {
               namespace = "com.pifuhdc.viewer"
+
               compileSdk = 35
 
               defaultConfig {
                   applicationId = "com.pifuhdc.viewer"
+
                   minSdk = 26
                   targetSdk = 35
 
@@ -103,7 +155,10 @@ jobs:
           }
 
           dependencies {
-              implementation("androidx.core:core-ktx:1.15.0")
+
+              implementation(
+                  "androidx.core:core-ktx:1.15.0"
+              )
 
               implementation(
                   "com.google.android.filament:filament-android:1.76.1"
@@ -119,24 +174,13 @@ jobs:
           }
           EOF
 
-          cat > app/src/main/res/values/styles.xml <<'EOF'
-          <?xml version="1.0" encoding="utf-8"?>
-          <resources>
+      # ==========================================================
+      # ANDROID MANIFEST
+      # ==========================================================
 
-              <style
-                  name="AppTheme"
-                  parent="android:style/Theme.Material.NoActionBar">
-
-                  <item name="android:fontFamily">sans</item>
-                  <item name="android:windowLightStatusBar">false</item>
-                  <item name="android:statusBarColor">#101114</item>
-                  <item name="android:navigationBarColor">#101114</item>
-
-              </style>
-
-          </resources>
-          EOF
-
+      - name: Create AndroidManifest.xml
+        shell: bash
+        run: |
           cat > app/src/main/AndroidManifest.xml <<'EOF'
           <?xml version="1.0" encoding="utf-8"?>
 
@@ -155,11 +199,13 @@ jobs:
                       android:exported="true">
 
                       <intent-filter>
+
                           <action
                               android:name="android.intent.action.MAIN" />
 
                           <category
                               android:name="android.intent.category.LAUNCHER" />
+
                       </intent-filter>
 
                   </activity>
@@ -169,6 +215,48 @@ jobs:
           </manifest>
           EOF
 
+      # ==========================================================
+      # THEME
+      # ==========================================================
+
+      - name: Create styles.xml
+        shell: bash
+        run: |
+          cat > app/src/main/res/values/styles.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+
+          <resources>
+
+              <style
+                  name="AppTheme"
+                  parent="android:style/Theme.Material.NoActionBar">
+
+                  <item name="android:fontFamily">sans</item>
+
+                  <item name="android:windowLightStatusBar">
+                      false
+                  </item>
+
+                  <item name="android:statusBarColor">
+                      #101114
+                  </item>
+
+                  <item name="android:navigationBarColor">
+                      #101114
+                  </item>
+
+              </style>
+
+          </resources>
+          EOF
+
+      # ==========================================================
+      # MAIN ACTIVITY
+      # ==========================================================
+
+      - name: Create MainActivity.kt
+        shell: bash
+        run: |
           cat > app/src/main/java/com/pifuhdc/viewer/MainActivity.kt <<'EOF'
           package com.pifuhdc.viewer
 
@@ -178,6 +266,7 @@ jobs:
           import android.os.Bundle
           import android.view.Choreographer
           import android.view.Gravity
+          import android.view.MotionEvent
           import android.view.SurfaceView
           import android.view.ViewGroup
           import android.widget.Button
@@ -193,6 +282,7 @@ jobs:
           class MainActivity : Activity() {
 
               companion object {
+
                   private const val PICK_GLB = 1001
 
                   init {
@@ -201,16 +291,23 @@ jobs:
               }
 
               private lateinit var surfaceView: SurfaceView
+
               private lateinit var modelViewer: ModelViewer
+
               private lateinit var status: TextView
 
               private val frameCallback =
                   object : Choreographer.FrameCallback {
 
-                      override fun doFrame(frameTimeNanos: Long) {
+                      override fun doFrame(
+                          frameTimeNanos: Long
+                      ) {
 
                           if (::modelViewer.isInitialized) {
-                              modelViewer.render(frameTimeNanos)
+
+                              modelViewer.render(
+                                  frameTimeNanos
+                              )
                           }
 
                           Choreographer
@@ -219,16 +316,27 @@ jobs:
                       }
                   }
 
-              override fun onCreate(savedInstanceState: Bundle?) {
+              override fun onCreate(
+                  savedInstanceState: Bundle?
+              ) {
+
                   super.onCreate(savedInstanceState)
 
                   window.addFlags(
-                      android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+                      android.view.WindowManager
+                          .LayoutParams
+                          .FLAG_KEEP_SCREEN_ON
                   )
 
-                  val root = FrameLayout(this)
+                  val root =
+                      FrameLayout(this)
 
-                  surfaceView = SurfaceView(this)
+                  // ==================================================
+                  // 3D SURFACE
+                  // ==================================================
+
+                  surfaceView =
+                      SurfaceView(this)
 
                   root.addView(
                       surfaceView,
@@ -238,7 +346,12 @@ jobs:
                       )
                   )
 
-                  val topBar = FrameLayout(this)
+                  // ==================================================
+                  // TOP BAR
+                  // ==================================================
+
+                  val topBar =
+                      FrameLayout(this)
 
                   topBar.setPadding(
                       24,
@@ -247,27 +360,41 @@ jobs:
                       18
                   )
 
-                  val title = TextView(this).apply {
-                      text = "PIFuHDC 3D Viewer"
-                      textSize = 20f
-                      setTextColor(0xFFFFFFFF.toInt())
-                      gravity = Gravity.CENTER_VERTICAL
-                  }
+                  val title =
+                      TextView(this).apply {
 
-                  val openButton = Button(this).apply {
-                      text = "OPEN GLB"
+                          text =
+                              "PIFuHDC 3D Viewer"
 
-                      setOnClickListener {
-                          openGlbPicker()
+                          textSize = 20f
+
+                          setTextColor(
+                              0xFFFFFFFF.toInt()
+                          )
+
+                          gravity =
+                              Gravity.CENTER_VERTICAL
                       }
-                  }
+
+                  val openButton =
+                      Button(this).apply {
+
+                          text =
+                              "OPEN GLB"
+
+                          setOnClickListener {
+
+                              openGlbPicker()
+                          }
+                      }
 
                   topBar.addView(
                       title,
                       FrameLayout.LayoutParams(
                           ViewGroup.LayoutParams.WRAP_CONTENT,
                           ViewGroup.LayoutParams.WRAP_CONTENT,
-                          Gravity.START or Gravity.CENTER_VERTICAL
+                          Gravity.START or
+                              Gravity.CENTER_VERTICAL
                       )
                   )
 
@@ -276,7 +403,8 @@ jobs:
                       FrameLayout.LayoutParams(
                           ViewGroup.LayoutParams.WRAP_CONTENT,
                           ViewGroup.LayoutParams.WRAP_CONTENT,
-                          Gravity.END or Gravity.CENTER_VERTICAL
+                          Gravity.END or
+                              Gravity.CENTER_VERTICAL
                       )
                   )
 
@@ -289,57 +417,92 @@ jobs:
                       )
                   )
 
-                  status = TextView(this).apply {
-                      text = "Open a .glb character file"
-                      textSize = 14f
-                      setTextColor(0xFFE6E7EA.toInt())
-                      setBackgroundColor(0xAA101114.toInt())
+                  // ==================================================
+                  // STATUS
+                  // ==================================================
 
-                      setPadding(
-                          20,
-                          12,
-                          20,
-                          12
-                      )
-                  }
+                  status =
+                      TextView(this).apply {
+
+                          text =
+                              "Open a .glb character file"
+
+                          textSize = 14f
+
+                          setTextColor(
+                              0xFFE6E7EA.toInt()
+                          )
+
+                          setBackgroundColor(
+                              0xAA101114.toInt()
+                          )
+
+                          setPadding(
+                              20,
+                              12,
+                              20,
+                              12
+                          )
+                      }
 
                   root.addView(
                       status,
                       FrameLayout.LayoutParams(
                           ViewGroup.LayoutParams.WRAP_CONTENT,
                           ViewGroup.LayoutParams.WRAP_CONTENT,
-                          Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
+                          Gravity.BOTTOM or
+                              Gravity.CENTER_HORIZONTAL
                       ).apply {
-                          bottomMargin = 28.dp()
+
+                          bottomMargin =
+                              28.dp()
                       }
                   )
 
                   setContentView(root)
 
-                  modelViewer = ModelViewer(surfaceView)
+                  // ==================================================
+                  // FILAMENT
+                  // ==================================================
 
-                  surfaceView.setOnTouchListener { _, event ->
+                  modelViewer =
+                      ModelViewer(surfaceView)
 
-                      modelViewer.onTouchEvent(event)
+                  surfaceView.setOnTouchListener {
+                      _,
+                      event: MotionEvent ->
+
+                      modelViewer.onTouchEvent(
+                          event
+                      )
 
                       true
                   }
 
                   Choreographer
                       .getInstance()
-                      .postFrameCallback(frameCallback)
+                      .postFrameCallback(
+                          frameCallback
+                      )
               }
+
+              // ======================================================
+              // FILE PICKER
+              // ======================================================
 
               private fun openGlbPicker() {
 
                   val intent =
-                      Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                      Intent(
+                          Intent.ACTION_OPEN_DOCUMENT
+                      ).apply {
 
                           addCategory(
                               Intent.CATEGORY_OPENABLE
                           )
 
-                          type = "model/gltf-binary"
+                          type =
+                              "model/gltf-binary"
 
                           putExtra(
                               Intent.EXTRA_MIME_TYPES,
@@ -355,6 +518,10 @@ jobs:
                       PICK_GLB
                   )
               }
+
+              // ======================================================
+              // FILE RESULT
+              // ======================================================
 
               @Deprecated(
                   "Activity Result API can be added later."
@@ -378,14 +545,23 @@ jobs:
                       return
                   }
 
-                  val uri = data?.data ?: return
+                  val uri =
+                      data?.data
+                          ?: return
 
                   loadGlb(uri)
               }
 
-              private fun loadGlb(uri: Uri) {
+              // ======================================================
+              // LOAD GLB
+              // ======================================================
 
-                  status.text = "Loading character..."
+              private fun loadGlb(
+                  uri: Uri
+              ) {
+
+                  status.text =
+                      "Loading character..."
 
                   Thread {
 
@@ -406,17 +582,21 @@ jobs:
 
                           runOnUiThread {
 
-                              modelViewer.loadModelGlb(
-                                  buffer
-                              )
+                              modelViewer
+                                  .loadModelGlb(
+                                      buffer
+                                  )
 
-                              modelViewer.transformToUnitCube()
+                              modelViewer
+                                  .transformToUnitCube()
 
                               status.text =
                                   "Character loaded • drag / pinch / pan"
                           }
 
-                      } catch (error: Throwable) {
+                      } catch (
+                          error: Throwable
+                      ) {
 
                           runOnUiThread {
 
@@ -426,7 +606,8 @@ jobs:
                               Toast.makeText(
                                   this,
                                   "Could not load GLB: ${
-                                      error.message ?: "unknown error"
+                                      error.message
+                                          ?: "unknown error"
                                   }",
                                   Toast.LENGTH_LONG
                               ).show()
@@ -436,6 +617,10 @@ jobs:
                   }.start()
               }
 
+              // ======================================================
+              // CLEANUP
+              // ======================================================
+
               override fun onDestroy() {
 
                   Choreographer
@@ -444,88 +629,231 @@ jobs:
                           frameCallback
                       )
 
-                  if (::modelViewer.isInitialized) {
+                  if (
+                      ::modelViewer.isInitialized
+                  ) {
+
                       modelViewer.destroy()
                   }
 
                   super.onDestroy()
               }
 
+              // ======================================================
+              // DP
+              // ======================================================
+
               private fun Int.dp(): Int {
 
                   return (
                       this *
-                      resources.displayMetrics.density
-                  ).toInt()
+                          resources.displayMetrics.density
+                      ).toInt()
               }
           }
           EOF
 
+      # ==========================================================
+      # GITIGNORE
+      # ==========================================================
+
+      - name: Create .gitignore
+        shell: bash
+        run: |
           cat > .gitignore <<'EOF'
-          *.iml
-          .gradle
-          local.properties
-          .idea/
+          .gradle/
           build/
-          captures/
-          .externalNativeBuild/
-          .cxx/
           app/build/
+
+          local.properties
+
+          .idea/
+          *.iml
+
+          .DS_Store
           EOF
 
-      - name: Download Gradle
+      # ==========================================================
+      # DOWNLOAD GRADLE
+      # ==========================================================
+
+      - name: Download Gradle 8.9
+        shell: bash
         run: |
+          set -e
+
           wget -q \
             https://services.gradle.org/distributions/gradle-8.9-bin.zip
 
-          unzip -q gradle-8.9-bin.zip
+          unzip -q \
+            gradle-8.9-bin.zip
 
-      - name: Setup Java 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "17"
+          test -x gradle-8.9/bin/gradle
+
+          echo "Gradle 8.9 ready"
+
+      # ==========================================================
+      # ANDROID SDK
+      #
+      # IMPORTANT:
+      # Do NOT install the obsolete "tools" package.
+      # ==========================================================
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          packages: |
+            platform-tools
+            platforms;android-35
+            build-tools;35.0.0
 
-      - name: Install Android SDK
+      # ==========================================================
+      # ACCEPT LICENSES
+      # ==========================================================
+
+      - name: Accept Android licenses
+        shell: bash
         run: |
           yes | sdkmanager --licenses >/dev/null || true
 
-          sdkmanager \
-            "platform-tools" \
-            "platforms;android-35" \
-            "build-tools;35.0.0"
+      # ==========================================================
+      # VERIFY SDK
+      # ==========================================================
 
-      - name: Build APK
+      - name: Verify Android SDK
+        shell: bash
+        run: |
+          set -e
+
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
+
+          echo
+          echo "Installed Android packages:"
+          sdkmanager --list_installed | head -100
+
+          echo
+          echo "Checking Android platform..."
+
+          test -d \
+            "$ANDROID_SDK_ROOT/platforms/android-35"
+
+          echo
+          echo "Checking build tools..."
+
+          test -d \
+            "$ANDROID_SDK_ROOT/build-tools/35.0.0"
+
+          echo
+          echo "Android SDK verification OK"
+
+      # ==========================================================
+      # GRADLE VERSION
+      # ==========================================================
+
+      - name: Verify Gradle
+        shell: bash
         run: |
           ./gradle-8.9/bin/gradle \
+            --version
+
+      # ==========================================================
+      # BUILD DEBUG APK
+      # ==========================================================
+
+      - name: Build Debug APK
+        shell: bash
+        run: |
+          set -e
+
+          ./gradle-8.9/bin/gradle \
             --no-daemon \
+            --stacktrace \
             assembleDebug
 
-      - name: Verify APK
-        run: |
-          test -f app/build/outputs/apk/debug/app-debug.apk
+      # ==========================================================
+      # VERIFY APK
+      # ==========================================================
 
-          ls -lh \
-            app/build/outputs/apk/debug/app-debug.apk
+      - name: Verify APK
+        shell: bash
+        run: |
+          set -e
+
+          APK="app/build/outputs/apk/debug/app-debug.apk"
+
+          test -f "$APK"
+
+          echo
+          echo "=========================================="
+          echo "APK BUILD SUCCESS"
+          echo "=========================================="
+          echo
+
+          ls -lh "$APK"
+
+          echo
+          echo "APK SHA256:"
+          sha256sum "$APK"
+
+      # ==========================================================
+      # SHOW PROJECT
+      # ==========================================================
+
+      - name: Show generated project
+        shell: bash
+        run: |
+          echo "=========================================="
+          echo "GENERATED PROJECT"
+          echo "=========================================="
+
+          find . \
+            -maxdepth 5 \
+            -type f \
+            ! -path "./.git/*" \
+            ! -path "./gradle-8.9/*" \
+            | sort
+
+      # ==========================================================
+      # COMMIT PROJECT
+      # ==========================================================
 
       - name: Commit generated project
+        shell: bash
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          set -e
+
+          git config \
+            user.name \
+            "github-actions[bot]"
+
+          git config \
+            user.email \
+            "41898282+github-actions[bot]@users.noreply.github.com"
 
           git add .
 
-          git diff --cached --quiet || \
-            git commit -m "Bootstrap PIFuHDC 3D Viewer Android app"
+          if git diff --cached --quiet; then
 
-          git push
+              echo "No changes to commit."
 
-      - name: Upload APK
+          else
+
+              git commit \
+                -m "Bootstrap PIFuHDC 3D Viewer Android app"
+
+              git push
+
+          fi
+
+      # ==========================================================
+      # UPLOAD APK
+      # ==========================================================
+
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: PIFuHDC-3D-Viewer-debug
           path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
           retention-days: 14
