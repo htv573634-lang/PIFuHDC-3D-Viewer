@@ -28,8 +28,6 @@ jobs:
 
       # ==========================================================
       # JAVA 17
-      # No Gradle cache here because the repository initially
-      # contains no Gradle files.
       # ==========================================================
 
       - name: Setup Java 17
@@ -181,7 +179,7 @@ jobs:
           EOF
 
       # ==========================================================
-      # ANDROID MANIFEST
+      # MANIFEST
       # ==========================================================
 
       - name: Create AndroidManifest.xml
@@ -289,7 +287,6 @@ jobs:
           class MainActivity : Activity() {
 
               companion object {
-
                   private const val PICK_GLB = 1001
 
                   init {
@@ -298,9 +295,7 @@ jobs:
               }
 
               private lateinit var surfaceView: SurfaceView
-
               private lateinit var modelViewer: ModelViewer
-
               private lateinit var status: TextView
 
               private val frameCallback =
@@ -309,13 +304,8 @@ jobs:
                       override fun doFrame(
                           frameTimeNanos: Long
                       ) {
-
-                          if (
-                              ::modelViewer.isInitialized
-                          ) {
-                              modelViewer.render(
-                                  frameTimeNanos
-                              )
+                          if (::modelViewer.isInitialized) {
+                              modelViewer.render(frameTimeNanos)
                           }
 
                           Choreographer
@@ -327,7 +317,6 @@ jobs:
               override fun onCreate(
                   savedInstanceState: Bundle?
               ) {
-
                   super.onCreate(savedInstanceState)
 
                   window.addFlags(
@@ -335,15 +324,9 @@ jobs:
                           .FLAG_KEEP_SCREEN_ON
                   )
 
-                  val root =
-                      FrameLayout(this)
+                  val root = FrameLayout(this)
 
-                  // ==================================================
-                  // 3D VIEW
-                  // ==================================================
-
-                  surfaceView =
-                      SurfaceView(this)
+                  surfaceView = SurfaceView(this)
 
                   root.addView(
                       surfaceView,
@@ -353,12 +336,7 @@ jobs:
                       )
                   )
 
-                  // ==================================================
-                  // TOP BAR
-                  // ==================================================
-
-                  val topBar =
-                      FrameLayout(this)
+                  val topBar = FrameLayout(this)
 
                   topBar.setPadding(
                       24,
@@ -369,25 +347,18 @@ jobs:
 
                   val title =
                       TextView(this).apply {
-
-                          text =
-                              "PIFuHDC 3D Viewer"
-
+                          text = "PIFuHDC 3D Viewer"
                           textSize = 20f
-
                           setTextColor(
                               0xFFFFFFFF.toInt()
                           )
-
                           gravity =
                               Gravity.CENTER_VERTICAL
                       }
 
                   val openButton =
                       Button(this).apply {
-
-                          text =
-                              "OPEN GLB"
+                          text = "OPEN GLB"
 
                           setOnClickListener {
                               openGlbPicker()
@@ -423,13 +394,8 @@ jobs:
                       )
                   )
 
-                  // ==================================================
-                  // STATUS
-                  // ==================================================
-
                   status =
                       TextView(this).apply {
-
                           text =
                               "Open a .glb character file"
 
@@ -459,17 +425,11 @@ jobs:
                           Gravity.BOTTOM or
                               Gravity.CENTER_HORIZONTAL
                       ).apply {
-
-                          bottomMargin =
-                              28.dp()
+                          bottomMargin = 28.dp()
                       }
                   )
 
                   setContentView(root)
-
-                  // ==================================================
-                  // FILAMENT
-                  // ==================================================
 
                   modelViewer =
                       ModelViewer(surfaceView)
@@ -478,9 +438,7 @@ jobs:
                       _,
                       event: MotionEvent ->
 
-                      modelViewer.onTouchEvent(
-                          event
-                      )
+                      modelViewer.onTouchEvent(event)
 
                       true
                   }
@@ -492,12 +450,7 @@ jobs:
                       )
               }
 
-              // ======================================================
-              // OPEN GLB
-              // ======================================================
-
               private fun openGlbPicker() {
-
                   val intent =
                       Intent(
                           Intent.ACTION_OPEN_DOCUMENT
@@ -525,10 +478,6 @@ jobs:
                   )
               }
 
-              // ======================================================
-              // RESULT
-              // ======================================================
-
               @Deprecated(
                   "Activity Result API can be added later."
               )
@@ -537,7 +486,6 @@ jobs:
                   resultCode: Int,
                   data: Intent?
               ) {
-
                   super.onActivityResult(
                       requestCode,
                       resultCode,
@@ -557,21 +505,12 @@ jobs:
                   loadGlb(uri)
               }
 
-              // ======================================================
-              // LOAD GLB
-              // ======================================================
-
-              private fun loadGlb(
-                  uri: Uri
-              ) {
-
+              private fun loadGlb(uri: Uri) {
                   status.text =
                       "Loading character..."
 
                   Thread {
-
                       try {
-
                           val bytes =
                               contentResolver
                                   .openInputStream(uri)
@@ -586,7 +525,6 @@ jobs:
                               ByteBuffer.wrap(bytes)
 
                           runOnUiThread {
-
                               modelViewer
                                   .loadModelGlb(buffer)
 
@@ -600,9 +538,7 @@ jobs:
                       } catch (
                           error: Throwable
                       ) {
-
                           runOnUiThread {
-
                               status.text =
                                   "Failed to load GLB"
 
@@ -619,12 +555,7 @@ jobs:
                   }.start()
               }
 
-              // ======================================================
-              // CLEANUP
-              // ======================================================
-
               override fun onDestroy() {
-
                   Choreographer
                       .getInstance()
                       .removeFrameCallback(
@@ -640,12 +571,7 @@ jobs:
                   super.onDestroy()
               }
 
-              // ======================================================
-              // DP
-              // ======================================================
-
               private fun Int.dp(): Int {
-
                   return (
                       this *
                           resources.displayMetrics.density
@@ -658,27 +584,64 @@ jobs:
       # ANDROID SDK
       #
       # IMPORTANT:
-      # No packages: input here.
-      # Each sdkmanager package is a separate argument.
+      # We deliberately DO NOT use:
+      #
+      # android-actions/setup-android
+      #
+      # The GitHub Ubuntu runner already contains the Android SDK.
       # ==========================================================
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Install Android SDK
+      - name: Locate Android SDK
         shell: bash
         run: |
           set -e
 
-          yes | sdkmanager --licenses >/dev/null || true
+          if [ -n "${ANDROID_HOME:-}" ]; then
+              SDK="$ANDROID_HOME"
+          elif [ -n "${ANDROID_SDK_ROOT:-}" ]; then
+              SDK="$ANDROID_SDK_ROOT"
+          else
+              SDK="/usr/local/lib/android/sdk"
+          fi
 
-          sdkmanager \
+          echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
+
+          echo "Android SDK:"
+          echo "$SDK"
+
+          test -x "$SDK/cmdline-tools/latest/bin/sdkmanager" \
+            || test -x "$SDK/cmdline-tools/16.0/bin/sdkmanager"
+
+      # ==========================================================
+      # INSTALL REQUIRED ANDROID COMPONENTS
+      # ==========================================================
+
+      - name: Install Android SDK packages
+        shell: bash
+        run: |
+          set -e
+
+          SDK="$ANDROID_HOME"
+
+          if [ -x "$SDK/cmdline-tools/latest/bin/sdkmanager" ]; then
+              SDKMANAGER="$SDK/cmdline-tools/latest/bin/sdkmanager"
+          else
+              SDKMANAGER="$SDK/cmdline-tools/16.0/bin/sdkmanager"
+          fi
+
+          echo "Using:"
+          echo "$SDKMANAGER"
+
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+
+          "$SDKMANAGER" \
             "platform-tools" \
             "platforms;android-35" \
             "build-tools;35.0.0"
 
       # ==========================================================
-      # SETUP GRADLE 8.9
+      # SETUP GRADLE
       # ==========================================================
 
       - name: Setup Gradle
@@ -712,15 +675,24 @@ jobs:
         run: |
           set -e
 
-          test -f settings.gradle.kts
-          test -f build.gradle.kts
-          test -f gradle.properties
-          test -f app/build.gradle.kts
-          test -f app/src/main/AndroidManifest.xml
-          test -f app/src/main/res/values/styles.xml
-          test -f app/src/main/java/com/pifuhdc/viewer/MainActivity.kt
-          test -f gradlew
-          test -f gradle/wrapper/gradle-wrapper.properties
+          files=(
+            "settings.gradle.kts"
+            "build.gradle.kts"
+            "gradle.properties"
+            "app/build.gradle.kts"
+            "app/src/main/AndroidManifest.xml"
+            "app/src/main/res/values/styles.xml"
+            "app/src/main/java/com/pifuhdc/viewer/MainActivity.kt"
+            "gradlew"
+            "gradle/wrapper/gradle-wrapper.properties"
+          )
+
+          for file in "${files[@]}"; do
+              if [ ! -f "$file" ]; then
+                  echo "MISSING: $file"
+                  exit 1
+              fi
+          done
 
           echo
           echo "=========================================="
@@ -728,7 +700,7 @@ jobs:
           echo "=========================================="
 
       # ==========================================================
-      # BUILD DEBUG APK
+      # BUILD
       # ==========================================================
 
       - name: Build Debug APK
@@ -758,9 +730,8 @@ jobs:
 
           echo
           echo "=========================================="
-          echo "PIFuHDC 3D VIEWER APK BUILD SUCCESS"
+          echo "BUILD SUCCESS"
           echo "=========================================="
-          echo
 
           ls -lh "$APK"
 
@@ -817,7 +788,7 @@ jobs:
         run: |
           echo
           echo "=========================================="
-          echo "PIFuHDC 3D VIEWER BUILD COMPLETED"
+          echo "PIFuHDC 3D VIEWER COMPLETED"
           echo "=========================================="
           echo
           echo "APK:"
