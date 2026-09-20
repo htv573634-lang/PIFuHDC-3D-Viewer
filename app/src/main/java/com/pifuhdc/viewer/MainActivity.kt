@@ -3,6 +3,7 @@ package com.pifuhdc.viewer
 import android.app.Activity
 import android.content.Intent
 import android.net.Uri
+import android.graphics.Color
 import android.os.Bundle
 import android.view.Choreographer
 import android.view.Gravity
@@ -24,6 +25,8 @@ class MainActivity : Activity() {
     private lateinit var statusText: TextView
     private lateinit var textureView: TextureView
 
+    private var renderingStarted = false
+
     private val choreographer =
         Choreographer.getInstance()
 
@@ -37,7 +40,9 @@ class MainActivity : Activity() {
                     modelViewer.render(frameTimeNanos)
                 }
 
-                choreographer.postFrameCallback(this)
+                if (renderingStarted) {
+                    choreographer.postFrameCallback(this)
+                }
             }
         }
 
@@ -58,10 +63,10 @@ class MainActivity : Activity() {
         /*
          * Main screen
          *
-         * Upper area:
-         *     3D GLB viewer
+         * Top:
+         *     GLB viewer
          *
-         * Bottom area:
+         * Bottom:
          *     Status
          *     Open GLB button
          */
@@ -73,7 +78,7 @@ class MainActivity : Activity() {
                     LinearLayout.VERTICAL
 
                 setBackgroundColor(
-                    android.graphics.Color.BLACK
+                    Color.BLACK
                 )
             }
 
@@ -97,7 +102,7 @@ class MainActivity : Activity() {
 
         /*
          * ------------------------------------------------
-         * BOTTOM CONTROL AREA
+         * BOTTOM CONTROL PANEL
          * ------------------------------------------------
          */
 
@@ -118,28 +123,25 @@ class MainActivity : Activity() {
                 )
 
                 setBackgroundColor(
-                    android.graphics.Color.WHITE
+                    Color.WHITE
                 )
             }
-
-        /*
-         * Status text
-         */
 
         statusText =
             TextView(this).apply {
 
                 text =
-                    "No model loaded"
+                    "Initializing viewer..."
 
                 gravity =
                     Gravity.CENTER
 
                 setTextColor(
-                    android.graphics.Color.DKGRAY
+                    Color.DKGRAY
                 )
 
-                textSize = 14f
+                textSize =
+                    14f
 
                 setPadding(
                     8,
@@ -148,10 +150,6 @@ class MainActivity : Activity() {
                     8
                 )
             }
-
-        /*
-         * Open GLB button
-         */
 
         val openButton =
             Button(this).apply {
@@ -180,10 +178,6 @@ class MainActivity : Activity() {
             )
         )
 
-        /*
-         * Bottom panel occupies remaining space.
-         */
-
         root.addView(
             bottomPanel,
             LinearLayout.LayoutParams(
@@ -196,8 +190,7 @@ class MainActivity : Activity() {
         setContentView(root)
 
         /*
-         * Create Filament ModelViewer only after
-         * TextureView is attached to the window.
+         * Create Filament after TextureView is attached.
          */
 
         textureView.post {
@@ -214,6 +207,17 @@ class MainActivity : Activity() {
                 statusText.text =
                     "No model loaded"
 
+                /*
+                 * IMPORTANT:
+                 *
+                 * Start the render loop here.
+                 *
+                 * Previously onResume() could happen
+                 * before ModelViewer was initialized.
+                 */
+
+                startRendering()
+
             } catch (e: Exception) {
 
                 statusText.text =
@@ -228,35 +232,66 @@ class MainActivity : Activity() {
         }
     }
 
+    /*
+     * ------------------------------------------------
+     * RENDER LOOP
+     * ------------------------------------------------
+     */
+
+    private fun startRendering() {
+
+        if (renderingStarted) {
+            return
+        }
+
+        renderingStarted = true
+
+        choreographer.removeFrameCallback(
+            frameCallback
+        )
+
+        choreographer.postFrameCallback(
+            frameCallback
+        )
+    }
+
+    private fun stopRendering() {
+
+        renderingStarted = false
+
+        choreographer.removeFrameCallback(
+            frameCallback
+        )
+    }
+
     override fun onResume() {
 
         super.onResume()
 
         if (::modelViewer.isInitialized) {
-
-            choreographer.postFrameCallback(
-                frameCallback
-            )
+            startRendering()
         }
     }
 
     override fun onPause() {
 
-        choreographer.removeFrameCallback(
-            frameCallback
-        )
+        stopRendering()
 
         super.onPause()
     }
 
     override fun onDestroy() {
 
-        choreographer.removeFrameCallback(
-            frameCallback
-        )
+        stopRendering()
 
         super.onDestroy()
     }
+
+    /*
+     * ------------------------------------------------
+     * OPEN WITH / FILE INTENT
+     * ------------------------------------------------
+     */
 
     override fun onNewIntent(
         intent: Intent?
@@ -272,12 +307,6 @@ class MainActivity : Activity() {
         }
     }
 
-    /*
-     * ------------------------------------------------
-     * OPEN WITH / FILE INTENT
-     * ------------------------------------------------
-     */
-
     private fun handleIntent(
         intent: Intent
     ) {
@@ -288,15 +317,35 @@ class MainActivity : Activity() {
             intent.data != null
         ) {
 
-            loadGlb(
-                intent.data!!
-            )
+            /*
+             * If the app was opened directly with a GLB,
+             * wait until ModelViewer is initialized.
+             */
+
+            if (::modelViewer.isInitialized) {
+
+                loadGlb(
+                    intent.data!!
+                )
+
+            } else {
+
+                textureView.post {
+
+                    if (::modelViewer.isInitialized) {
+
+                        loadGlb(
+                            intent.data!!
+                        )
+                    }
+                }
+            }
         }
     }
 
     /*
      * ------------------------------------------------
-     * GLB FILE PICKER
+     * GLB PICKER
      * ------------------------------------------------
      */
 
@@ -311,7 +360,8 @@ class MainActivity : Activity() {
                     Intent.CATEGORY_OPENABLE
                 )
 
-                type = "*/*"
+                type =
+                    "*/*"
 
                 putExtra(
                     Intent.EXTRA_MIME_TYPES,
@@ -384,7 +434,7 @@ class MainActivity : Activity() {
                 "Reading GLB..."
 
             /*
-             * Read selected file.
+             * Read selected GLB.
              */
 
             val bytes =
@@ -398,11 +448,7 @@ class MainActivity : Activity() {
                     )
 
             /*
-             * GLB header is 12 bytes:
-             *
-             * 0-3   magic
-             * 4-7   version
-             * 8-11  total length
+             * GLB header is 12 bytes.
              */
 
             if (bytes.size < 12) {
@@ -413,7 +459,7 @@ class MainActivity : Activity() {
             }
 
             /*
-             * Check magic.
+             * Check GLB magic.
              */
 
             val magic =
@@ -432,7 +478,7 @@ class MainActivity : Activity() {
             }
 
             /*
-             * GLB integers are LITTLE-ENDIAN.
+             * GLB uses little-endian integers.
              */
 
             val header =
@@ -453,7 +499,7 @@ class MainActivity : Activity() {
             }
 
             /*
-             * Validate declared GLB size.
+             * Read declared total length.
              */
 
             val declaredLength =
@@ -479,7 +525,7 @@ class MainActivity : Activity() {
                     .format(sizeMb)
 
             /*
-             * Pass GLB to Filament.
+             * Create GLB buffer.
              */
 
             val glbBuffer =
@@ -489,15 +535,25 @@ class MainActivity : Activity() {
                         ByteOrder.LITTLE_ENDIAN
                     )
 
+            /*
+             * Load into Filament.
+             */
+
             modelViewer.loadModelGlb(
                 glbBuffer
             )
 
             /*
-             * Automatically fit the model.
+             * Fit model to viewer.
              */
 
             modelViewer.transformToUnitCube()
+
+            /*
+             * Make sure rendering is active.
+             */
+
+            startRendering()
 
             statusText.text =
                 "Model loaded"
@@ -517,6 +573,7 @@ class MainActivity : Activity() {
 
     companion object {
 
-        private const val REQUEST_GLB = 7001
+        private const val REQUEST_GLB =
+            7001
     }
 }
