@@ -27,7 +27,7 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v4
 
-      - name: Install Android SDK packages
+      - name: Install Android SDK
         run: |
           yes | sdkmanager --licenses >/dev/null || true
 
@@ -44,36 +44,20 @@ jobs:
           sdkmanager --list_installed | grep -E \
             "platform-tools|platforms;android-37.0|build-tools;36.0.0" || true
 
-      - name: Download Filament 1.77.0 AARs
+      - name: Verify real MainActivity
         run: |
-          mkdir -p app/libs
+          test -f \
+            app/src/main/java/com/pifuhdc/viewer/MainActivity.kt
 
-          curl -L --fail --retry 3 \
-            "https://repo1.maven.org/maven2/com/google/android/filament/filament-android/1.77.0/filament-android-1.77.0.aar" \
-            -o app/libs/filament.aar
+          echo "Real MainActivity found."
+          wc -l \
+            app/src/main/java/com/pifuhdc/viewer/MainActivity.kt
 
-          curl -L --fail --retry 3 \
-            "https://repo1.maven.org/maven2/com/google/android/filament/gltfio-android/1.77.0/gltfio-android-1.77.0.aar" \
-            -o app/libs/gltfio.aar
-
-          curl -L --fail --retry 3 \
-            "https://repo1.maven.org/maven2/com/google/android/filament/filament-utils-android/1.77.0/filament-utils-android-1.77.0.aar" \
-            -o app/libs/filament-utils-api.aar
-
-      - name: Verify Filament files
+      - name: Remove stale local Filament AARs
         run: |
-          ls -lh app/libs/
-
-          test -s app/libs/filament.aar
-          test -s app/libs/gltfio.aar
-          test -s app/libs/filament-utils-api.aar
-
-      - name: Verify real MainActivity exists
-        run: |
-          test -f app/src/main/java/com/pifuhdc/viewer/MainActivity.kt
-
-          echo "Real MainActivity found:"
-          wc -l app/src/main/java/com/pifuhdc/viewer/MainActivity.kt
+          rm -f app/libs/filament.aar
+          rm -f app/libs/gltfio.aar
+          rm -f app/libs/filament-utils-api.aar
 
       - name: Generate Gradle wrapper
         run: |
@@ -85,15 +69,21 @@ jobs:
 
       - name: Show project configuration
         run: |
-          echo "=== Root build.gradle.kts ==="
+          echo "===== settings.gradle.kts ====="
+          cat settings.gradle.kts
+
+          echo "===== build.gradle.kts ====="
           cat build.gradle.kts
 
-          echo "=== App build.gradle.kts ==="
+          echo "===== app/build.gradle.kts ====="
           cat app/build.gradle.kts
 
-          echo "=== MainActivity.kt ==="
-          sed -n '1,260p' \
-            app/src/main/java/com/pifuhdc/viewer/MainActivity.kt
+      - name: Check Gradle configuration
+        run: |
+          ./gradlew \
+            :app:dependencies \
+            --configuration debugRuntimeClasspath \
+            --no-daemon
 
       - name: Clean project
         run: |
@@ -107,10 +97,16 @@ jobs:
 
       - name: Verify APK
         run: |
-          echo "=== APK files ==="
-          find app/build/outputs/apk -type f -name "*.apk" -print -exec ls -lh {} \;
+          echo "===== APK OUTPUT ====="
 
-          test -f app/build/outputs/apk/debug/app-debug.apk
+          find app/build/outputs/apk \
+            -type f \
+            -name "*.apk" \
+            -print \
+            -exec ls -lh {} \;
+
+          test -f \
+            app/build/outputs/apk/debug/app-debug.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
