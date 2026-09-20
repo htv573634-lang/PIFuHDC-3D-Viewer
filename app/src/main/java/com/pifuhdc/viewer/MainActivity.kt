@@ -2,8 +2,8 @@ package com.pifuhdc.viewer
 
 import android.app.Activity
 import android.content.Intent
-import android.net.Uri
 import android.graphics.Color
+import android.net.Uri
 import android.os.Bundle
 import android.view.Choreographer
 import android.view.Gravity
@@ -13,6 +13,9 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 
+import com.google.android.filament.IndirectLight
+import com.google.android.filament.Skybox
+import com.google.android.filament.View
 import com.google.android.filament.utils.ModelViewer
 import com.google.android.filament.utils.Utils
 
@@ -22,13 +25,19 @@ import java.nio.ByteOrder
 class MainActivity : Activity() {
 
     private lateinit var modelViewer: ModelViewer
-    private lateinit var statusText: TextView
     private lateinit var textureView: TextureView
+    private lateinit var statusText: TextView
 
     private var renderingStarted = false
 
     private val choreographer =
         Choreographer.getInstance()
+
+    /*
+     * ------------------------------------------------
+     * FRAME LOOP
+     * ------------------------------------------------
+     */
 
     private val frameCallback =
         object : Choreographer.FrameCallback {
@@ -36,40 +45,50 @@ class MainActivity : Activity() {
             override fun doFrame(
                 frameTimeNanos: Long
             ) {
+
                 if (::modelViewer.isInitialized) {
-                    modelViewer.render(frameTimeNanos)
+
+                    modelViewer.render(
+                        frameTimeNanos
+                    )
                 }
 
                 if (renderingStarted) {
-                    choreographer.postFrameCallback(this)
+
+                    choreographer.postFrameCallback(
+                        this
+                    )
                 }
             }
         }
 
+    /*
+     * ------------------------------------------------
+     * ACTIVITY
+     * ------------------------------------------------
+     */
+
     override fun onCreate(
         savedInstanceState: Bundle?
     ) {
+
         super.onCreate(savedInstanceState)
 
+        /*
+         * Required by Filament.
+         */
         Utils.init()
 
-        createViewer()
-
-        handleIntent(intent)
+        createUserInterface()
     }
 
-    private fun createViewer() {
+    /*
+     * ------------------------------------------------
+     * USER INTERFACE
+     * ------------------------------------------------
+     */
 
-        /*
-         * Main screen
-         *
-         * Top:
-         *     GLB viewer
-         *
-         * Bottom:
-         *     Status
-         *     Open GLB button
-         */
+    private fun createUserInterface() {
 
         val root =
             LinearLayout(this).apply {
@@ -84,7 +103,7 @@ class MainActivity : Activity() {
 
         /*
          * ------------------------------------------------
-         * 3D VIEWER
+         * TOP 3D VIEW
          * ------------------------------------------------
          */
 
@@ -131,7 +150,7 @@ class MainActivity : Activity() {
             TextView(this).apply {
 
                 text =
-                    "Initializing viewer..."
+                    "Initializing 3D viewer..."
 
                 gravity =
                     Gravity.CENTER
@@ -158,6 +177,7 @@ class MainActivity : Activity() {
                     "Open GLB"
 
                 setOnClickListener {
+
                     openGlbPicker()
                 }
             }
@@ -190,46 +210,163 @@ class MainActivity : Activity() {
         setContentView(root)
 
         /*
-         * Create Filament after TextureView is attached.
+         * TextureView must be attached before
+         * creating ModelViewer.
          */
 
         textureView.post {
 
-            try {
-
-                modelViewer =
-                    ModelViewer(textureView)
-
-                textureView.setOnTouchListener(
-                    modelViewer
-                )
-
-                statusText.text =
-                    "No model loaded"
-
-                /*
-                 * IMPORTANT:
-                 *
-                 * Start the render loop here.
-                 *
-                 * Previously onResume() could happen
-                 * before ModelViewer was initialized.
-                 */
-
-                startRendering()
-
-            } catch (e: Exception) {
-
-                statusText.text =
-                    "Viewer initialization failed"
-
-                Toast.makeText(
-                    this,
-                    "Filament error: ${e.message}",
-                    Toast.LENGTH_LONG
-                ).show()
-            }
+            initializeFilament()
         }
+    }
+
+    /*
+     * ------------------------------------------------
+     * FILAMENT INITIALIZATION
+     * ------------------------------------------------
+     */
+
+    private fun initializeFilament() {
+
+        try {
+
+            modelViewer =
+                ModelViewer(textureView)
+
+            /*
+             * Enable touch rotation / zoom.
+             */
+            textureView.setOnTouchListener(
+                modelViewer
+            )
+
+            /*
+             * Configure environment lighting.
+             */
+            createNeutralEnvironment()
+
+            /*
+             * Rendering must start AFTER
+             * ModelViewer exists.
+             */
+            startRendering()
+
+            statusText.text =
+                "Ready - select a GLB"
+
+            /*
+             * Handle an Open-With GLB if one
+             * was supplied when launching.
+             */
+            handleIntent(intent)
+
+        } catch (e: Exception) {
+
+            statusText.text =
+                "Viewer initialization failed"
+
+            Toast.makeText(
+                this,
+                "Filament error: ${e.message}",
+                Toast.LENGTH_LONG
+            ).show()
+        }
+    }
+
+    /*
+     * ------------------------------------------------
+     * NEUTRAL LIGHTING / ENVIRONMENT
+     * ------------------------------------------------
+     *
+     * This does NOT require an external KTX file.
+     *
+     * We create:
+     *
+     * 1. Indirect light
+     * 2. Neutral skybox
+     *
+     * The ModelViewer already supplies a direct
+     * directional/sun light.
+     */
+
+    private fun createNeutralEnvironment() {
+
+        val engine =
+            modelViewer.engine
+
+        /*
+         * ------------------------------------------------
+         * INDIRECT LIGHT
+         * ------------------------------------------------
+         */
+
+        val indirectLight =
+            IndirectLight.Builder()
+                .intensity(30_000.0f)
+                .radiance(
+                    1,
+                    floatArrayOf(
+                        1.0f,
+                        1.0f,
+                        1.0f
+                    )
+                )
+                .irradiance(
+                    1,
+                    floatArrayOf(
+                        1.0f,
+                        1.0f,
+                        1.0f
+                    )
+                )
+                .build(engine)
+
+        modelViewer.scene.indirectLight =
+            indirectLight
+
+        /*
+         * Keep reference so ModelViewer.destroy()
+         * can clean up correctly.
+         *
+         * This is a simple constant environment,
+         * so there is no external texture.
+         */
+
+        /*
+         * ------------------------------------------------
+         * SKYBOX
+         * ------------------------------------------------
+         *
+         * Light gray background makes the model
+         * easier to see.
+         */
+
+        val skybox =
+            Skybox.Builder()
+                .color(
+                    0.08f,
+                    0.08f,
+                    0.08f,
+                    1.0f
+                )
+                .build(engine)
+
+        modelViewer.scene.skybox =
+            skybox
+
+        /*
+         * Mobile-friendly rendering settings.
+         */
+
+        modelViewer.view.renderQuality =
+            modelViewer.view.renderQuality.apply {
+
+                hdrColorBuffer =
+                    View.QualityLevel.MEDIUM
+            }
+
+        modelViewer.view.antiAliasing =
+            View.AntiAliasing.FXAA
     }
 
     /*
@@ -269,6 +406,7 @@ class MainActivity : Activity() {
         super.onResume()
 
         if (::modelViewer.isInitialized) {
+
             startRendering()
         }
     }
@@ -284,68 +422,22 @@ class MainActivity : Activity() {
 
         stopRendering()
 
+        if (::modelViewer.isInitialized) {
+
+            try {
+
+                modelViewer.destroy()
+
+            } catch (_: Exception) {
+            }
+        }
+
         super.onDestroy()
     }
 
     /*
      * ------------------------------------------------
-     * OPEN WITH / FILE INTENT
-     * ------------------------------------------------
-     */
-
-    override fun onNewIntent(
-        intent: Intent?
-    ) {
-
-        super.onNewIntent(intent)
-
-        if (intent != null) {
-
-            setIntent(intent)
-
-            handleIntent(intent)
-        }
-    }
-
-    private fun handleIntent(
-        intent: Intent
-    ) {
-
-        if (
-            intent.action ==
-                Intent.ACTION_VIEW &&
-            intent.data != null
-        ) {
-
-            /*
-             * If the app was opened directly with a GLB,
-             * wait until ModelViewer is initialized.
-             */
-
-            if (::modelViewer.isInitialized) {
-
-                loadGlb(
-                    intent.data!!
-                )
-
-            } else {
-
-                textureView.post {
-
-                    if (::modelViewer.isInitialized) {
-
-                        loadGlb(
-                            intent.data!!
-                        )
-                    }
-                }
-            }
-        }
-    }
-
-    /*
-     * ------------------------------------------------
-     * GLB PICKER
+     * OPEN GLB PICKER
      * ------------------------------------------------
      */
 
@@ -380,6 +472,64 @@ class MainActivity : Activity() {
         )
     }
 
+    /*
+     * ------------------------------------------------
+     * OPEN-WITH SUPPORT
+     * ------------------------------------------------
+     */
+
+    override fun onNewIntent(
+        intent: Intent?
+    ) {
+
+        super.onNewIntent(intent)
+
+        if (intent != null) {
+
+            setIntent(intent)
+
+            handleIntent(intent)
+        }
+    }
+
+    private fun handleIntent(
+        incomingIntent: Intent
+    ) {
+
+        if (
+            incomingIntent.action ==
+                Intent.ACTION_VIEW &&
+            incomingIntent.data != null
+        ) {
+
+            val uri =
+                incomingIntent.data!!
+
+            if (::modelViewer.isInitialized) {
+
+                loadGlb(uri)
+
+            } else {
+
+                textureView.post {
+
+                    if (
+                        ::modelViewer.isInitialized
+                    ) {
+
+                        loadGlb(uri)
+                    }
+                }
+            }
+        }
+    }
+
+    /*
+     * ------------------------------------------------
+     * PICKER RESULT
+     * ------------------------------------------------
+     */
+
     @Deprecated(
         "Activity Result API will be used later."
     )
@@ -409,7 +559,7 @@ class MainActivity : Activity() {
 
     /*
      * ------------------------------------------------
-     * GLB LOADER
+     * GLB LOADING
      * ------------------------------------------------
      */
 
@@ -434,32 +584,36 @@ class MainActivity : Activity() {
                 "Reading GLB..."
 
             /*
-             * Read selected GLB.
+             * Read the complete GLB.
              */
 
             val bytes =
                 contentResolver
                     .openInputStream(uri)
                     ?.use { input ->
+
                         input.readBytes()
+
                     }
                     ?: throw IllegalStateException(
-                        "Unable to open file"
+                        "Unable to open GLB file"
                     )
 
             /*
-             * GLB header is 12 bytes.
+             * ------------------------------------------------
+             * VALIDATE GLB HEADER
+             * ------------------------------------------------
              */
 
             if (bytes.size < 12) {
 
                 throw IllegalArgumentException(
-                    "File is too small"
+                    "File is smaller than a GLB header"
                 )
             }
 
             /*
-             * Check GLB magic.
+             * Magic = glTF
              */
 
             val magic =
@@ -473,12 +627,12 @@ class MainActivity : Activity() {
             if (magic != "glTF") {
 
                 throw IllegalArgumentException(
-                    "Not a valid GLB file"
+                    "This is not a valid GLB file"
                 )
             }
 
             /*
-             * GLB uses little-endian integers.
+             * GLB integers are LITTLE-ENDIAN.
              */
 
             val header =
@@ -497,10 +651,6 @@ class MainActivity : Activity() {
                     "Unsupported GLB version: $version"
                 )
             }
-
-            /*
-             * Read declared total length.
-             */
 
             val declaredLength =
                 header.getInt(8)
@@ -525,7 +675,9 @@ class MainActivity : Activity() {
                     .format(sizeMb)
 
             /*
-             * Create GLB buffer.
+             * ------------------------------------------------
+             * CREATE BUFFER
+             * ------------------------------------------------
              */
 
             val glbBuffer =
@@ -536,7 +688,14 @@ class MainActivity : Activity() {
                     )
 
             /*
-             * Load into Filament.
+             * ------------------------------------------------
+             * LOAD GLB
+             * ------------------------------------------------
+             *
+             * Filament loads resources asynchronously.
+             * The render loop will call asyncUpdateLoad()
+             * internally and populate the scene when
+             * resources become ready.
              */
 
             modelViewer.loadModelGlb(
@@ -544,19 +703,23 @@ class MainActivity : Activity() {
             )
 
             /*
-             * Fit model to viewer.
+             * Set initial model transform.
              */
-
             modelViewer.transformToUnitCube()
 
             /*
-             * Make sure rendering is active.
+             * Make absolutely sure the render loop
+             * remains active.
              */
-
             startRendering()
 
             statusText.text =
-                "Model loaded"
+                "Loading model..."
+
+            /*
+             * Monitor asynchronous resource loading.
+             */
+            monitorModelLoading()
 
         } catch (e: Exception) {
 
@@ -569,6 +732,78 @@ class MainActivity : Activity() {
                 Toast.LENGTH_LONG
             ).show()
         }
+    }
+
+    /*
+     * ------------------------------------------------
+     * ASYNC MODEL LOADING MONITOR
+     * ------------------------------------------------
+     *
+     * ModelViewer loads GLB resources asynchronously.
+     * We watch progress and re-apply the transform after
+     * resources become available.
+     */
+
+    private fun monitorModelLoading() {
+
+        val checkRunnable =
+            object : Runnable {
+
+                override fun run() {
+
+                    if (
+                        !::modelViewer.isInitialized
+                    ) {
+                        return
+                    }
+
+                    val progress =
+                        modelViewer.progress
+
+                    if (progress < 1.0f) {
+
+                        statusText.text =
+                            "Loading model... %d%%"
+                                .format(
+                                    (progress * 100.0f)
+                                        .toInt()
+                                )
+
+                        textureView.postDelayed(
+                            this,
+                            100L
+                        )
+
+                    } else {
+
+                        /*
+                         * Resources are ready.
+                         *
+                         * Apply transform again now that
+                         * the asset is fully loaded.
+                         */
+                        try {
+
+                            modelViewer
+                                .transformToUnitCube()
+
+                            statusText.text =
+                                "Model loaded"
+
+                        } catch (e: Exception) {
+
+                            statusText.text =
+                                "Model loaded with transform warning"
+                        }
+
+                        startRendering()
+                    }
+                }
+            }
+
+        textureView.post(
+            checkRunnable
+        )
     }
 
     companion object {
