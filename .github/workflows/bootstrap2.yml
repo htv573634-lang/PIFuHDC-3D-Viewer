@@ -30,31 +30,125 @@ jobs:
 
 
       # ============================================================
-      # 3. ANDROID SDK 37
+      # 3. LOCATE ANDROID SDK
       # ============================================================
-      - name: Setup Android SDK
+      - name: Locate Android SDK
         shell: bash
         run: |
           set -e
 
-          yes | sdkmanager --licenses >/dev/null || true
+          echo "ANDROID_HOME=${ANDROID_HOME:-not-set}"
+          echo "ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT:-not-set}"
 
-          sdkmanager \
+          SDK_ROOT=""
+
+          if [ -n "${ANDROID_HOME:-}" ] && [ -d "$ANDROID_HOME" ]; then
+            SDK_ROOT="$ANDROID_HOME"
+          elif [ -n "${ANDROID_SDK_ROOT:-}" ] && [ -d "$ANDROID_SDK_ROOT" ]; then
+            SDK_ROOT="$ANDROID_SDK_ROOT"
+          elif [ -d "/opt/android-sdk" ]; then
+            SDK_ROOT="/opt/android-sdk"
+          fi
+
+          if [ -z "$SDK_ROOT" ]; then
+            echo "ERROR: Android SDK directory was not found."
+
+            echo "Searching filesystem..."
+            find /opt /usr/local /home/runner \
+              -maxdepth 5 \
+              -type d \
+              -name "android-sdk" \
+              2>/dev/null || true
+
+            exit 1
+          fi
+
+          echo "Android SDK root:"
+          echo "$SDK_ROOT"
+
+          echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK_ROOT" >> "$GITHUB_ENV"
+
+
+      # ============================================================
+      # 4. LOCATE SDKMANAGER
+      # ============================================================
+      - name: Locate sdkmanager
+        shell: bash
+        run: |
+          set -e
+
+          SDK_ROOT="$ANDROID_HOME"
+
+          SDKMANAGER=""
+
+          for candidate in \
+            "$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" \
+            "$SDK_ROOT/cmdline-tools/bin/sdkmanager" \
+            "$SDK_ROOT/tools/bin/sdkmanager" \
+            "/usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager" \
+            "/usr/local/lib/android/sdk/cmdline-tools/bin/sdkmanager" \
+            "/opt/android-sdk/cmdline-tools/latest/bin/sdkmanager" \
+            "/opt/android-sdk/cmdline-tools/bin/sdkmanager"
+          do
+            if [ -x "$candidate" ]; then
+              SDKMANAGER="$candidate"
+              break
+            fi
+          done
+
+          if [ -z "$SDKMANAGER" ]; then
+            echo "sdkmanager was not found in standard locations."
+
+            echo ""
+            echo "Searching for sdkmanager:"
+            find "$SDK_ROOT" \
+              -type f \
+              -name "sdkmanager" \
+              2>/dev/null || true
+
+            exit 1
+          fi
+
+          echo "SDKMANAGER=$SDKMANAGER" >> "$GITHUB_ENV"
+
+          echo "Found sdkmanager:"
+          echo "$SDKMANAGER"
+
+
+      # ============================================================
+      # 5. ANDROID API 37
+      # ============================================================
+      - name: Install Android API 37
+        shell: bash
+        run: |
+          set -e
+
+          echo "Accepting Android SDK licenses..."
+
+          yes | "$SDKMANAGER" --licenses >/dev/null 2>&1 || true
+
+          echo "Installing required Android components..."
+
+          "$SDKMANAGER" \
             "platform-tools" \
             "platforms;android-37" \
             "build-tools;36.0.0"
 
-          yes | sdkmanager --licenses >/dev/null || true
+          echo "Checking API 37..."
 
-          echo "Installed Android platforms:"
-          sdkmanager --list_installed | grep "platforms;android-37" || true
+          if [ ! -d "$ANDROID_HOME/platforms/android-37" ]; then
+            echo "ERROR: Android API 37 was not installed."
 
-          echo "Installed build tools:"
-          sdkmanager --list_installed | grep "build-tools;36.0.0" || true
+            exit 1
+          fi
+
+          echo ""
+          echo "Android API 37 installed successfully."
 
 
       # ============================================================
-      # 4. GRADLE 9.5
+      # 6. GRADLE 9.5
       # ============================================================
       - name: Setup Gradle 9.5
         shell: bash
@@ -63,19 +157,23 @@ jobs:
 
           wget -q \
             https://services.gradle.org/distributions/gradle-9.5-bin.zip \
-            -O /tmp/gradle.zip
+            -O /tmp/gradle-9.5.zip
 
           unzip -q \
-            /tmp/gradle.zip \
+            /tmp/gradle-9.5.zip \
             -d /opt
 
           echo "/opt/gradle-9.5/bin" >> "$GITHUB_PATH"
 
+          export PATH="/opt/gradle-9.5/bin:$PATH"
+
+          echo ""
+          echo "Gradle version:"
           gradle --version
 
 
       # ============================================================
-      # 5. CREATE DIRECTORIES
+      # 7. CREATE DIRECTORIES
       # ============================================================
       - name: Create project directories
         shell: bash
@@ -84,22 +182,30 @@ jobs:
 
           mkdir -p .github/workflows
 
-          mkdir -p app/src/main/java/com/pifuhdc/viewer
+          mkdir -p \
+            app/src/main/java/com/pifuhdc/viewer
 
-          mkdir -p app/src/main/res/values
+          mkdir -p \
+            app/src/main/res/values
 
-          mkdir -p app/src/main/assets/models
-          mkdir -p app/src/main/assets/sample
+          mkdir -p \
+            app/src/main/assets/models
 
-          mkdir -p app/src/main/cpp
+          mkdir -p \
+            app/src/main/assets/sample
 
-          mkdir -p app/libs
+          mkdir -p \
+            app/src/main/cpp
 
-          mkdir -p gradle/wrapper
+          mkdir -p \
+            app/libs
+
+          mkdir -p \
+            gradle/wrapper
 
 
       # ============================================================
-      # 6. DOWNLOAD FILAMENT 1.77.0
+      # 8. DOWNLOAD FILAMENT
       # ============================================================
       - name: Download Filament 1.77.0
         shell: bash
@@ -110,7 +216,7 @@ jobs:
 
           BASE_URL="https://github.com/google/filament/releases/download/v${VERSION}"
 
-          echo "Downloading official Filament ${VERSION}..."
+          echo "Downloading Filament ${VERSION}..."
 
           wget -q \
             "${BASE_URL}/filament-v${VERSION}-android.aar" \
@@ -125,12 +231,19 @@ jobs:
             -O app/libs/filament-utils.aar
 
           echo ""
-          echo "Filament files:"
+          echo "Filament libraries:"
           ls -lh app/libs/
+
+          test -s app/libs/filament.aar
+          test -s app/libs/gltfio.aar
+          test -s app/libs/filament-utils.aar
+
+          echo ""
+          echo "Filament download successful."
 
 
       # ============================================================
-      # 7. SETTINGS
+      # 9. SETTINGS
       # ============================================================
       - name: Write settings.gradle.kts
         shell: bash
@@ -164,7 +277,7 @@ jobs:
 
 
       # ============================================================
-      # 8. ROOT BUILD
+      # 10. ROOT BUILD
       # ============================================================
       - name: Write root build.gradle.kts
         shell: bash
@@ -178,7 +291,7 @@ jobs:
 
 
       # ============================================================
-      # 9. GRADLE PROPERTIES
+      # 11. GRADLE PROPERTIES
       # ============================================================
       - name: Write gradle.properties
         shell: bash
@@ -191,7 +304,7 @@ jobs:
 
 
       # ============================================================
-      # 10. APP BUILD
+      # 12. APP BUILD FILE
       # ============================================================
       - name: Write app/build.gradle.kts
         shell: bash
@@ -282,7 +395,7 @@ jobs:
 
 
       # ============================================================
-      # 11. MANIFEST
+      # 13. MANIFEST
       # ============================================================
       - name: Write AndroidManifest.xml
         shell: bash
@@ -339,7 +452,7 @@ jobs:
 
 
       # ============================================================
-      # 12. STRINGS
+      # 14. STRINGS
       # ============================================================
       - name: Write strings.xml
         shell: bash
@@ -358,7 +471,7 @@ jobs:
 
 
       # ============================================================
-      # 13. STYLE
+      # 15. STYLES
       # ============================================================
       - name: Write styles.xml
         shell: bash
@@ -395,7 +508,7 @@ jobs:
 
 
       # ============================================================
-      # 14. PROGUARD
+      # 16. PROGUARD
       # ============================================================
       - name: Write proguard-rules.pro
         shell: bash
@@ -406,7 +519,7 @@ jobs:
 
 
       # ============================================================
-      # 15. MAIN ACTIVITY
+      # 17. MAIN ACTIVITY
       # ============================================================
       - name: Write MainActivity.kt
         shell: bash
@@ -801,7 +914,7 @@ jobs:
 
 
       # ============================================================
-      # 16. PLACEHOLDER FILES
+      # 18. PLACEHOLDER FILES
       # ============================================================
       - name: Create placeholder files
         shell: bash
@@ -812,7 +925,7 @@ jobs:
 
 
       # ============================================================
-      # 17. GENERATE WRAPPER
+      # 19. GENERATE GRADLE WRAPPER
       # ============================================================
       - name: Generate Gradle wrapper
         shell: bash
@@ -824,41 +937,36 @@ jobs:
 
           chmod +x gradlew
 
+          echo ""
+          echo "Gradle wrapper generated."
+
 
       # ============================================================
-      # 18. VERIFY SDK
+      # 20. VERIFY PROJECT
       # ============================================================
-      - name: Verify Android SDK
+      - name: Verify project
         shell: bash
         run: |
           set -e
 
-          echo "ANDROID_HOME=$ANDROID_HOME"
+          echo "Project files:"
+          find . \
+            -maxdepth 6 \
+            -type f \
+            -not -path "./.git/*" \
+            | sort
 
-          test -d "$ANDROID_HOME/platforms/android-37"
+          echo ""
+          echo "Android SDK:"
+          ls -ld "$ANDROID_HOME/platforms/android-37"
 
-          echo "Android API 37 is installed."
-
-
-      # ============================================================
-      # 19. VERIFY FILAMENT
-      # ============================================================
-      - name: Verify Filament AARs
-        shell: bash
-        run: |
-          set -e
-
-          test -s app/libs/filament.aar
-          test -s app/libs/gltfio.aar
-          test -s app/libs/filament-utils.aar
-
+          echo ""
+          echo "Filament:"
           ls -lh app/libs/
 
-          echo "Filament AARs verified."
-
 
       # ============================================================
-      # 20. BUILD APK
+      # 21. BUILD DEBUG APK
       # ============================================================
       - name: Build Debug APK
         shell: bash
@@ -872,19 +980,27 @@ jobs:
 
 
       # ============================================================
-      # 21. CHECK APK
+      # 22. CHECK APK
       # ============================================================
       - name: Check APK
         shell: bash
         run: |
           set -e
 
-          ls -lh \
-            app/build/outputs/apk/debug/app-debug.apk
+          APK="app/build/outputs/apk/debug/app-debug.apk"
+
+          test -f "$APK"
+
+          echo ""
+          echo "=========================================="
+          echo "APK BUILD SUCCESS"
+          echo "=========================================="
+
+          ls -lh "$APK"
 
 
       # ============================================================
-      # 22. UPLOAD APK
+      # 23. UPLOAD APK
       # ============================================================
       - name: Upload Debug APK
         uses: actions/upload-artifact@v4
@@ -895,7 +1011,7 @@ jobs:
 
 
       # ============================================================
-      # 23. COMMIT PROJECT
+      # 24. COMMIT PROJECT
       # ============================================================
       - name: Commit Bootstrap 2 project
         shell: bash
