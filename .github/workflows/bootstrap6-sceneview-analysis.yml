@@ -42,7 +42,6 @@ jobs:
         with:
           python-version: "3.12"
 
-
       - name: Install report generator
         run: |
           python -m pip install --upgrade pip
@@ -76,7 +75,7 @@ jobs:
 
 
       # ============================================================
-      # 5. VERIFY SCENEVIEW MAVEN ARTIFACT
+      # 5. VERIFY SCENEVIEW MAVEN ARTIFACTS
       # ============================================================
 
       - name: Verify SceneView Maven artifacts
@@ -87,7 +86,8 @@ jobs:
 
           BASE="https://repo1.maven.org/maven2/io/github/sceneview"
 
-          echo "Checking sceneview..."
+          echo "Checking SceneView AAR..."
+
           curl -I \
             --fail \
             --silent \
@@ -95,7 +95,17 @@ jobs:
             "$BASE/sceneview/4.37.0/sceneview-4.37.0.aar"
 
           echo
-          echo "Checking sceneview-core..."
+          echo "Checking SceneView POM..."
+
+          curl -I \
+            --fail \
+            --silent \
+            --show-error \
+            "$BASE/sceneview/4.37.0/sceneview-4.37.0.pom"
+
+          echo
+          echo "Checking SceneView Core POM..."
+
           curl -I \
             --fail \
             --silent \
@@ -103,13 +113,16 @@ jobs:
             "$BASE/sceneview-core/4.37.0/sceneview-core-4.37.0.pom"
 
           echo
-          echo "Downloading POM files..."
+          echo "Downloading SceneView POM..."
 
           curl -L \
             --fail \
             --retry 3 \
             -o analysis/maven/sceneview-4.37.0.pom \
             "$BASE/sceneview/4.37.0/sceneview-4.37.0.pom"
+
+          echo
+          echo "Downloading SceneView Core POM..."
 
           curl -L \
             --fail \
@@ -127,7 +140,7 @@ jobs:
 
 
       # ============================================================
-      # 6. INSPECT CURRENT PROJECT
+      # 6. SNAPSHOT CURRENT PROJECT
       # ============================================================
 
       - name: Snapshot current project
@@ -186,7 +199,7 @@ jobs:
 
 
       # ============================================================
-      # 7. INSPECT CURRENT KOTLIN / XML SOURCE
+      # 7. INSPECT CURRENT ANDROID SOURCE
       # ============================================================
 
       - name: Snapshot Android source
@@ -220,7 +233,7 @@ jobs:
 
 
       # ============================================================
-      # 8. SEARCH CURRENT FILAMENT / GLB IMPLEMENTATION
+      # 8. ANALYZE CURRENT GLB / FILAMENT IMPLEMENTATION
       # ============================================================
 
       - name: Analyze current GLB renderer
@@ -246,10 +259,10 @@ jobs:
 
 
       # ============================================================
-      # 9. INSPECT SCENEVIEW SOURCE TREE
+      # 9. SCENEVIEW SOURCE TREE
       # ============================================================
 
-      - name: Inspect SceneView source
+      - name: Inspect SceneView source tree
         run: |
           set -e
 
@@ -309,7 +322,7 @@ jobs:
 
 
       # ============================================================
-      # 11. FIND SCENEVIEW GLB LOADING CODE
+      # 11. FIND SCENEVIEW GLB LOADING
       # ============================================================
 
       - name: Analyze SceneView GLB loading
@@ -338,7 +351,7 @@ jobs:
 
 
       # ============================================================
-      # 12. FIND SCENEVIEW RENDERING CODE
+      # 12. FIND SCENEVIEW RENDERING
       # ============================================================
 
       - name: Analyze SceneView renderer
@@ -392,9 +405,11 @@ jobs:
 
           } > analysis/sceneview/inspection/camera_gestures.txt
 
+          cat analysis/sceneview/inspection/camera_gestures.txt
+
 
       # ============================================================
-      # 14. WORKING SCENEVIEW EXAMPLES
+      # 14. FIND WORKING SCENEVIEW EXAMPLES
       # ============================================================
 
       - name: Find SceneView model examples
@@ -485,7 +500,7 @@ jobs:
 
 
       # ============================================================
-      # 17. GRADLE DEPENDENCY GRAPH
+      # 17. CURRENT PROJECT GRADLE DEPENDENCY GRAPH
       # ============================================================
 
       - name: Resolve current Gradle dependencies
@@ -520,7 +535,7 @@ jobs:
 
 
       # ============================================================
-      # 18. TEST SCENEVIEW ARTIFACT RESOLUTION
+      # 18. ISOLATED SCENEVIEW DEPENDENCY TEST
       # ============================================================
 
       - name: Create isolated SceneView dependency test
@@ -616,16 +631,20 @@ jobs:
           from pathlib import Path
           import re
 
-          project = Path(
+          project_path = Path(
               "app/build.gradle.kts"
-          ).read_text(
+          )
+
+          pom_path = Path(
+              "analysis/maven/sceneview-4.37.0.pom"
+          )
+
+          project = project_path.read_text(
               encoding="utf-8",
               errors="replace"
           )
 
-          pom = Path(
-              "analysis/maven/sceneview-4.37.0.pom"
-          ).read_text(
+          pom = pom_path.read_text(
               encoding="utf-8",
               errors="replace"
           )
@@ -648,16 +667,32 @@ jobs:
                   m.group(0)
               )
 
-          sceneview_filament = []
+          sceneview_dependencies = []
 
           for m in re.finditer(
-              r'<artifactId>filament[^<]*</artifactId>.*?'
-              r'<version>([^<]+)</version>',
+              r'<dependency>.*?</dependency>',
               pom,
               re.DOTALL
           ):
-              sceneview_filament.append(
-                  m.group(0)
+              block = m.group(0)
+
+              artifact = find(
+                  r'<artifactId>([^<]+)</artifactId>',
+                  block
+              )
+
+              version = find(
+                  r'<version>([^<]+)</version>',
+                  block
+              )
+
+              group = find(
+                  r'<groupId>([^<]+)</groupId>',
+                  block
+              )
+
+              sceneview_dependencies.append(
+                  f"{group}:{artifact}:{version}"
               )
 
           output = []
@@ -669,43 +704,52 @@ jobs:
               "===================================="
           )
           output.append("")
+
           output.append(
-              "Our compileSdk: " +
+              "Current project compileSdk: " +
               find(
                   r'compileSdk\s*=\s*(\d+)',
                   project
               )
           )
+
           output.append(
-              "Our targetSdk: " +
+              "Current project targetSdk: " +
               find(
                   r'targetSdk\s*=\s*(\d+)',
                   project
               )
           )
+
           output.append(
-              "Our minSdk: " +
+              "Current project minSdk: " +
               find(
                   r'minSdk\s*=\s*(\d+)',
                   project
               )
           )
+
           output.append("")
           output.append(
-              "Our Filament dependencies:"
+              "Current Filament dependencies:"
           )
 
-          for item in project_filament:
+          if project_filament:
+              for item in project_filament:
+                  output.append(
+                      "  " + item
+                  )
+          else:
               output.append(
-                  "  " + item
+                  "  none detected"
               )
 
           output.append("")
           output.append(
-              "SceneView POM Filament references:"
+              "SceneView published dependencies:"
           )
 
-          for item in sceneview_filament:
+          for item in sceneview_dependencies:
               output.append(
                   "  " + item
               )
@@ -714,16 +758,22 @@ jobs:
           output.append(
               "SceneView artifact:"
           )
+
           output.append(
               "  io.github.sceneview:sceneview:4.37.0"
           )
+
           output.append("")
           output.append(
-              "Result:"
+              "Important:"
           )
+
           output.append(
-              "  Dependency compatibility requires "
-              "Gradle resolution analysis before migration."
+              "  This is an analysis report only."
+          )
+
+          output.append(
+              "  No application dependency has been changed."
           )
 
           Path(
@@ -748,7 +798,6 @@ jobs:
           from docx import Document
           from docx.shared import Pt
           from docx.enum.text import WD_ALIGN_PARAGRAPH
-          from docx.enum.table import WD_TABLE_ALIGNMENT
 
           OUTPUT = Path(
               "PIFuHDC_SceneView_Compatibility_Analysis.docx"
@@ -842,15 +891,15 @@ jobs:
           )
 
           paragraph(
-              "Bootstrap 6 does not modify application source code, "
-              "Gradle files, the manifest, Bootstrap 3, Bootstrap 5, "
-              "or the existing build workflow."
+              "Bootstrap 6 performs analysis only. It does not "
+              "modify application source code, Gradle files, "
+              "the Android manifest, or existing workflows."
           )
 
-          heading("2. Verified SceneView Artifact")
+          heading("2. SceneView Artifact")
 
           paragraph(
-              "The inspected Android 3D artifact is:"
+              "The inspected Android 3D dependency is:"
           )
 
           paragraph(
@@ -858,38 +907,27 @@ jobs:
           )
 
           paragraph(
-              "SceneView 4.37.0 is a published Maven artifact and "
-              "the official project documents it as the Android "
-              "3D-only dependency."
+              "The dependency is resolved through Maven rather "
+              "than manually copying individual AAR files."
           )
 
-          heading("3. SceneView Architecture")
-
-          paragraph(
-              "SceneView is a declarative Android 3D API built on "
-              "Filament. Its documented GLB path uses SceneView, "
-              "ModelLoader/model instances and ModelNode rather "
-              "than requiring the application to manually construct "
-              "the complete Filament rendering lifecycle."
-          )
-
-          heading("4. Current Project Configuration")
+          heading("3. Current Project Configuration")
 
           code_section(
-              "Current project files",
+              "Current project configuration",
               "analysis/project/current_project.txt",
               60000
           )
 
-          heading("5. Current Renderer")
+          heading("4. Current Renderer")
 
           code_section(
-              "Current GLB/Filament API usage",
+              "Current GLB / Filament usage",
               "analysis/project/current_renderer_usage.txt",
               30000
           )
 
-          heading("6. Current Android Source")
+          heading("5. Current Android Source")
 
           code_section(
               "Current source snapshot",
@@ -897,31 +935,31 @@ jobs:
               80000
           )
 
-          heading("7. SceneView Build Configuration")
+          heading("6. SceneView Build Configuration")
 
           code_section(
-              "SceneView dependency/build analysis",
+              "SceneView build configuration",
               "analysis/sceneview/inspection/build_config.txt",
               50000
           )
 
-          heading("8. SceneView GLB Loading")
+          heading("7. SceneView GLB Loading")
 
           code_section(
-              "SceneView GLB/model loading references",
+              "GLB loading references",
               "analysis/sceneview/inspection/glb_loading.txt",
               50000
           )
 
-          heading("9. SceneView Rendering")
+          heading("8. SceneView Rendering")
 
           code_section(
-              "SceneView rendering references",
+              "Rendering references",
               "analysis/sceneview/inspection/rendering.txt",
               60000
           )
 
-          heading("10. Camera and Gesture Support")
+          heading("9. Camera and Gestures")
 
           code_section(
               "Camera and gesture references",
@@ -929,15 +967,15 @@ jobs:
               60000
           )
 
-          heading("11. Working SceneView Examples")
+          heading("10. Working Examples")
 
           code_section(
-              "Examples found in source",
+              "GLB/model examples",
               "analysis/sceneview/inspection/examples.txt",
               60000
           )
 
-          heading("12. Compose Requirements")
+          heading("11. Compose Requirements")
 
           code_section(
               "Compose analysis",
@@ -945,15 +983,15 @@ jobs:
               50000
           )
 
-          heading("13. Native ABI Analysis")
+          heading("12. Native ABI Analysis")
 
           code_section(
-              "Native ABI references",
+              "Native library references",
               "analysis/sceneview/inspection/native.txt",
               30000
           )
 
-          heading("14. SceneView Dependency Metadata")
+          heading("13. SceneView Maven Metadata")
 
           code_section(
               "SceneView POM",
@@ -967,54 +1005,48 @@ jobs:
               30000
           )
 
-          heading("15. Filament Compatibility")
-
-          paragraph(
-              "This section is intentionally based on the published "
-              "Maven metadata and the repository source rather than "
-              "a guessed dependency version."
-          )
+          heading("14. Compatibility Matrix")
 
           code_section(
               "Compatibility matrix",
               "analysis/compatibility_matrix.txt",
-              20000
+              30000
           )
 
-          heading("16. Current Gradle Dependency Graph")
+          heading("15. Existing Dependency Graph")
 
           code_section(
-              "Existing project dependency graph",
+              "Current project dependencies",
               "analysis/project/dependency_graph.txt",
               50000
           )
 
-          heading("17. Isolated SceneView Dependency Probe")
+          heading("16. Isolated SceneView Dependency Probe")
 
           code_section(
-              "SceneView-only dependency resolution",
+              "SceneView dependency resolution",
               "analysis/isolated-gradle/dependency_resolution.txt",
               50000
           )
 
-          heading("18. Important Migration Boundary")
+          heading("17. Recommended Architecture")
 
           paragraph(
-              "The safest eventual migration boundary is the GLB "
-              "viewer only. PIFuHDC reconstruction and GLB generation "
-              "should remain independent from the viewer."
+              "The intended architecture remains:"
           )
 
           paragraph(
-              "Desired architecture:"
+              "PIFuHDC reconstruction → GLB → SceneView "
+              "ModelLoader → ModelNode → Filament → Android display"
           )
 
           paragraph(
-              "PIFuHDC reconstruction → GLB → SceneView ModelLoader "
-              "→ ModelNode → Filament → Android display"
+              "PIFuHDC reconstruction should remain separate from "
+              "the GLB viewer. SceneView is being evaluated only "
+              "as the 3D display layer."
           )
 
-          heading("19. Files That Should NOT Be Modified by Bootstrap 6")
+          heading("18. Files Bootstrap 6 Must Not Modify")
 
           for item in [
               "MainActivity.kt",
@@ -1031,34 +1063,14 @@ jobs:
                   style="List Bullet"
               )
 
-          heading("20. Questions This Report Must Answer")
-
-          questions = [
-              "Does SceneView resolve cleanly with the project's AGP and SDK?",
-              "Which exact Filament version does SceneView resolve?",
-              "Does it conflict with Filament 1.76.1?",
-              "Does SceneView require Compose dependencies?",
-              "Can the existing activity host the SceneView API?",
-              "Can GLB data from the existing file picker be loaded?",
-              "Which existing Filament dependencies become redundant?",
-              "Which native ABIs are supplied?",
-              "What is the smallest safe migration?",
-              "Can the current PIFuHDC → GLB architecture remain unchanged?"
-          ]
-
-          for q in questions:
-              doc.add_paragraph(
-                  q,
-                  style="List Number"
-              )
-
-          heading("21. Conclusion")
+          heading("19. Final Assessment")
 
           paragraph(
-              "Bootstrap 6 is an analysis-only workflow. It does not "
-              "make any application changes. The report provides the "
-              "dependency, API, GLB-loading and rendering information "
-              "needed before replacing the current custom renderer."
+              "The final decision about replacing the existing "
+              "Filament renderer should be made only after reviewing "
+              "the actual dependency-resolution results, API usage, "
+              "GLB loading path, camera controls, Compose requirements, "
+              "and native ABI information collected by this workflow."
           )
 
           doc.save(OUTPUT)
@@ -1072,7 +1084,36 @@ jobs:
 
 
       # ============================================================
-      # 21. UPLOAD EVERYTHING
+      # 21. SHOW FINAL SIZE BEFORE UPLOAD
+      # ============================================================
+
+      - name: Show report artifact size
+        run: |
+          echo "Files that will be uploaded:"
+          echo
+
+          du -h \
+            PIFuHDC_SceneView_Compatibility_Analysis.docx \
+            analysis/project/*.txt \
+            analysis/compatibility_matrix.txt \
+            analysis/maven/*.pom \
+            analysis/sceneview/inspection/*.txt \
+            analysis/isolated-gradle/dependency_resolution.txt
+
+          echo
+          echo "Total:"
+          du -ch \
+            PIFuHDC_SceneView_Compatibility_Analysis.docx \
+            analysis/project/*.txt \
+            analysis/compatibility_matrix.txt \
+            analysis/maven/*.pom \
+            analysis/sceneview/inspection/*.txt \
+            analysis/isolated-gradle/dependency_resolution.txt \
+            | tail -n 1
+
+
+      # ============================================================
+      # 22. UPLOAD ONLY SMALL ANALYSIS OUTPUT
       # ============================================================
 
       - name: Upload Bootstrap 6 report
@@ -1081,5 +1122,9 @@ jobs:
           name: PIFuHDC-SceneView-Compatibility-Analysis
           path: |
             PIFuHDC_SceneView_Compatibility_Analysis.docx
-            analysis/
+            analysis/project/*.txt
+            analysis/compatibility_matrix.txt
+            analysis/maven/*.pom
+            analysis/sceneview/inspection/*.txt
+            analysis/isolated-gradle/dependency_resolution.txt
           if-no-files-found: error
