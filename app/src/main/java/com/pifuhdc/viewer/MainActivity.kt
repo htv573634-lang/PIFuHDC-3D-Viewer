@@ -24,7 +24,8 @@ class MainActivity : Activity() {
     private lateinit var statusText: TextView
     private lateinit var textureView: TextureView
 
-    private val choreographer = Choreographer.getInstance()
+    private val choreographer =
+        Choreographer.getInstance()
 
     private val frameCallback =
         object : Choreographer.FrameCallback {
@@ -54,49 +55,116 @@ class MainActivity : Activity() {
 
     private fun createViewer() {
 
-        val root = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-        }
+        /*
+         * Main screen
+         *
+         * Upper area:
+         *     3D GLB viewer
+         *
+         * Bottom area:
+         *     Status
+         *     Open GLB button
+         */
 
-        val toolbar = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER_HORIZONTAL
-            setPadding(
-                16,
-                16,
-                16,
-                16
-            )
-        }
+        val root =
+            LinearLayout(this).apply {
 
-        val openButton = Button(this).apply {
-            text = "Open GLB"
+                orientation =
+                    LinearLayout.VERTICAL
 
-            setOnClickListener {
-                openGlbPicker()
+                setBackgroundColor(
+                    android.graphics.Color.BLACK
+                )
             }
-        }
 
-        statusText = TextView(this).apply {
-            text = "No model loaded"
-            gravity = Gravity.CENTER
-            setPadding(
-                0,
-                12,
-                0,
-                0
-            )
-        }
+        /*
+         * ------------------------------------------------
+         * 3D VIEWER
+         * ------------------------------------------------
+         */
 
-        toolbar.addView(
-            openButton,
+        textureView =
+            TextureView(this)
+
+        root.addView(
+            textureView,
             LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                0,
+                0.82f
             )
         )
 
-        toolbar.addView(
+        /*
+         * ------------------------------------------------
+         * BOTTOM CONTROL AREA
+         * ------------------------------------------------
+         */
+
+        val bottomPanel =
+            LinearLayout(this).apply {
+
+                orientation =
+                    LinearLayout.VERTICAL
+
+                gravity =
+                    Gravity.CENTER
+
+                setPadding(
+                    16,
+                    8,
+                    16,
+                    12
+                )
+
+                setBackgroundColor(
+                    android.graphics.Color.WHITE
+                )
+            }
+
+        /*
+         * Status text
+         */
+
+        statusText =
+            TextView(this).apply {
+
+                text =
+                    "No model loaded"
+
+                gravity =
+                    Gravity.CENTER
+
+                setTextColor(
+                    android.graphics.Color.DKGRAY
+                )
+
+                textSize = 14f
+
+                setPadding(
+                    8,
+                    4,
+                    8,
+                    8
+                )
+            }
+
+        /*
+         * Open GLB button
+         */
+
+        val openButton =
+            Button(this).apply {
+
+                text =
+                    "Open GLB"
+
+                setOnClickListener {
+                    openGlbPicker()
+                }
+            }
+
+        bottomPanel.addView(
             statusText,
             LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
@@ -104,28 +172,36 @@ class MainActivity : Activity() {
             )
         )
 
-        textureView = TextureView(this)
-
-        root.addView(
-            toolbar,
+        bottomPanel.addView(
+            openButton,
             LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
             )
         )
 
+        /*
+         * Bottom panel occupies remaining space.
+         */
+
         root.addView(
-            textureView,
+            bottomPanel,
             LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 0,
-                1f
+                0.18f
             )
         )
 
         setContentView(root)
 
+        /*
+         * Create Filament ModelViewer only after
+         * TextureView is attached to the window.
+         */
+
         textureView.post {
+
             try {
 
                 modelViewer =
@@ -141,11 +217,11 @@ class MainActivity : Activity() {
             } catch (e: Exception) {
 
                 statusText.text =
-                    "Viewer init failed"
+                    "Viewer initialization failed"
 
                 Toast.makeText(
                     this,
-                    "Filament init error: ${e.message}",
+                    "Filament error: ${e.message}",
                     Toast.LENGTH_LONG
                 ).show()
             }
@@ -153,9 +229,11 @@ class MainActivity : Activity() {
     }
 
     override fun onResume() {
+
         super.onResume()
 
         if (::modelViewer.isInitialized) {
+
             choreographer.postFrameCallback(
                 frameCallback
             )
@@ -183,25 +261,44 @@ class MainActivity : Activity() {
     override fun onNewIntent(
         intent: Intent?
     ) {
+
         super.onNewIntent(intent)
 
         if (intent != null) {
+
             setIntent(intent)
+
             handleIntent(intent)
         }
     }
+
+    /*
+     * ------------------------------------------------
+     * OPEN WITH / FILE INTENT
+     * ------------------------------------------------
+     */
 
     private fun handleIntent(
         intent: Intent
     ) {
 
         if (
-            intent.action == Intent.ACTION_VIEW &&
+            intent.action ==
+                Intent.ACTION_VIEW &&
             intent.data != null
         ) {
-            loadGlb(intent.data!!)
+
+            loadGlb(
+                intent.data!!
+            )
         }
     }
+
+    /*
+     * ------------------------------------------------
+     * GLB FILE PICKER
+     * ------------------------------------------------
+     */
 
     private fun openGlbPicker() {
 
@@ -254,10 +351,17 @@ class MainActivity : Activity() {
         ) {
 
             data?.data?.let { uri ->
+
                 loadGlb(uri)
             }
         }
     }
+
+    /*
+     * ------------------------------------------------
+     * GLB LOADER
+     * ------------------------------------------------
+     */
 
     private fun loadGlb(
         uri: Uri
@@ -279,6 +383,10 @@ class MainActivity : Activity() {
             statusText.text =
                 "Reading GLB..."
 
+            /*
+             * Read selected file.
+             */
+
             val bytes =
                 contentResolver
                     .openInputStream(uri)
@@ -289,12 +397,24 @@ class MainActivity : Activity() {
                         "Unable to open file"
                     )
 
+            /*
+             * GLB header is 12 bytes:
+             *
+             * 0-3   magic
+             * 4-7   version
+             * 8-11  total length
+             */
+
             if (bytes.size < 12) {
 
                 throw IllegalArgumentException(
                     "File is too small"
                 )
             }
+
+            /*
+             * Check magic.
+             */
 
             val magic =
                 String(
@@ -312,12 +432,15 @@ class MainActivity : Activity() {
             }
 
             /*
-             * GLB uses little-endian byte order.
+             * GLB integers are LITTLE-ENDIAN.
              */
+
             val header =
                 ByteBuffer
                     .wrap(bytes)
-                    .order(ByteOrder.LITTLE_ENDIAN)
+                    .order(
+                        ByteOrder.LITTLE_ENDIAN
+                    )
 
             val version =
                 header.getInt(4)
@@ -328,6 +451,10 @@ class MainActivity : Activity() {
                     "Unsupported GLB version: $version"
                 )
             }
+
+            /*
+             * Validate declared GLB size.
+             */
 
             val declaredLength =
                 header.getInt(8)
@@ -348,19 +475,27 @@ class MainActivity : Activity() {
                     1024.0
 
             statusText.text =
-                "Loading %.1f MB...".format(sizeMb)
+                "Loading %.1f MB..."
+                    .format(sizeMb)
 
             /*
-             * Give Filament a little-endian buffer.
+             * Pass GLB to Filament.
              */
+
             val glbBuffer =
                 ByteBuffer
                     .wrap(bytes)
-                    .order(ByteOrder.LITTLE_ENDIAN)
+                    .order(
+                        ByteOrder.LITTLE_ENDIAN
+                    )
 
             modelViewer.loadModelGlb(
                 glbBuffer
             )
+
+            /*
+             * Automatically fit the model.
+             */
 
             modelViewer.transformToUnitCube()
 
