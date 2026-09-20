@@ -11,6 +11,9 @@ import android.view.TextureView
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
+import com.google.android.filament.EntityManager
+import com.google.android.filament.LightManager
+import com.google.android.filament.Skybox
 import com.google.android.filament.utils.ModelViewer
 import com.google.android.filament.utils.Utils
 import java.nio.ByteBuffer
@@ -62,7 +65,7 @@ class DuckTestActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
             setBackgroundColor(Color.WHITE)
-            setPadding(24,12,24,12)
+            setPadding(24, 12, 24, 12)
         }
 
         statusText = TextView(this).apply {
@@ -106,9 +109,30 @@ class DuckTestActivity : Activity() {
 
     private fun initializeViewer() {
         try {
-            modelViewer = ModelViewer(textureView)
-            statusText.text = "Renderer ready • Open GLB"
+            val viewer = ModelViewer(textureView)
+            modelViewer = viewer
+
+            // White sky background
+            viewer.scene.skybox = Skybox.Builder()
+                .color(floatArrayOf(0.95f, 0.95f, 1.0f, 1.0f))
+                .build(viewer.engine)
+
+            // Sun light
+            val sun = EntityManager.get().create()
+
+            LightManager.Builder(LightManager.Type.DIRECTIONAL)
+                .color(1.0f, 1.0f, 1.0f)
+                .intensity(120_000f)
+                .direction(-0.6f, -1.0f, -0.8f)
+                .castShadows(true)
+                .build(viewer.engine, sun)
+
+            viewer.scene.addEntity(sun)
+
+            statusText.text = "Renderer ready • Open Duck.glb"
+
             startRendering()
+
         } catch (e: Exception) {
             statusText.text = "Renderer error: ${e.message}"
         }
@@ -118,6 +142,7 @@ class DuckTestActivity : Activity() {
         val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
             addCategory(Intent.CATEGORY_OPENABLE)
             type = "*/*"
+
             putExtra(
                 Intent.EXTRA_MIME_TYPES,
                 arrayOf(
@@ -152,7 +177,8 @@ class DuckTestActivity : Activity() {
         try {
             statusText.text = "Reading GLB..."
 
-            val bytes = contentResolver.openInputStream(uri)
+            val bytes = contentResolver
+                .openInputStream(uri)
                 ?.use { it.readBytes() }
                 ?: throw Exception("Unable to read file")
 
@@ -160,7 +186,8 @@ class DuckTestActivity : Activity() {
                 throw Exception("Invalid GLB")
             }
 
-            val buffer = ByteBuffer.wrap(bytes)
+            val buffer = ByteBuffer
+                .wrap(bytes)
                 .order(ByteOrder.LITTLE_ENDIAN)
 
             val magic = buffer.int
@@ -172,7 +199,7 @@ class DuckTestActivity : Activity() {
             }
 
             if (version != 2) {
-                throw Exception("Unsupported GLB v$version")
+                throw Exception("Unsupported GLB version: $version")
             }
 
             if (length > bytes.size) {
@@ -181,8 +208,17 @@ class DuckTestActivity : Activity() {
 
             buffer.position(0)
 
-            modelViewer?.loadModelGlb(buffer)
-            modelViewer?.transformToUnitCube()
+            val viewer = modelViewer ?: throw Exception("Renderer not initialized")
+
+            viewer.loadModelGlb(buffer)
+            viewer.transformToUnitCube()
+
+            viewer.asset?.animator?.apply {
+                if (animationCount > 0) {
+                    applyAnimation(0, 0f)
+                    updateBoneMatrices()
+                }
+            }
 
             statusText.text = "GLB loaded ✓"
 
@@ -200,12 +236,15 @@ class DuckTestActivity : Activity() {
 
     private val frameCallback =
         object : Choreographer.FrameCallback {
-
             override fun doFrame(frameTimeNanos: Long) {
 
                 if (!rendering) return
 
-                modelViewer?.render(frameTimeNanos)
+                try {
+                    modelViewer?.render(frameTimeNanos)
+                } catch (e: Exception) {
+                    statusText.text = "Render error: ${e.message}"
+                }
 
                 Choreographer.getInstance().postFrameCallback(this)
             }
