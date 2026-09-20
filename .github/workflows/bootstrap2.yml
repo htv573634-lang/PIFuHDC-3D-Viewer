@@ -7,7 +7,7 @@ on:
       - main
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   bootstrap2:
@@ -39,8 +39,7 @@ jobs:
           packages: ''
 
       # ============================================================
-      # INSTALL REQUIRED ANDROID SDK PACKAGES
-      # API 37 package is android-37.0
+      # INSTALL ANDROID SDK
       # ============================================================
       - name: Install Android SDK packages
         shell: bash
@@ -55,6 +54,7 @@ jobs:
           echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
 
           which sdkmanager
+
           sdkmanager --version
 
           yes | sdkmanager --licenses >/dev/null || true
@@ -65,17 +65,19 @@ jobs:
             "build-tools;36.0.0"
 
           echo ""
-          echo "Installed Android platforms:"
+          echo "Installed platforms:"
           ls -la "$ANDROID_HOME/platforms"
 
           echo ""
-          echo "Checking Android 37:"
-          test -f "$ANDROID_HOME/platforms/android-37.0/android.jar"
+          echo "Checking Android 37.0..."
+
+          test -f \
+            "$ANDROID_HOME/platforms/android-37.0/android.jar"
 
           echo "Android 37.0 SDK OK"
 
       # ============================================================
-      # FILAMENT 1.77.0
+      # DOWNLOAD FILAMENT 1.77.0
       # ============================================================
       - name: Download Filament 1.77.0 AARs
         shell: bash
@@ -83,7 +85,7 @@ jobs:
           set -e
 
           echo "=========================================="
-          echo "DOWNLOADING FILAMENT 1.77.0"
+          echo "FILAMENT 1.77.0"
           echo "=========================================="
 
           mkdir -p app/libs
@@ -101,13 +103,13 @@ jobs:
             https://github.com/google/filament/releases/download/v1.77.0/filament-utils-v1.77.0-android.aar
 
           echo ""
-          echo "Filament files:"
+          echo "Filament AARs:"
           ls -lh app/libs
 
       # ============================================================
-      # CREATE PROJECT DIRECTORIES
+      # CREATE DIRECTORIES
       # ============================================================
-      - name: Create project structure
+      - name: Create project directories
         shell: bash
         run: |
           set -e
@@ -122,6 +124,9 @@ jobs:
 
       # ============================================================
       # ROOT BUILD FILE
+      #
+      # Kotlin 2.4.20 is required because the Filament
+      # utilities AAR contains Kotlin metadata 2.4.0.
       # ============================================================
       - name: Create root build.gradle.kts
         shell: bash
@@ -160,7 +165,9 @@ jobs:
           }
 
           dependencyResolutionManagement {
-              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+              repositoriesMode.set(
+                  RepositoriesMode.FAIL_ON_PROJECT_REPOS
+              )
 
               repositories {
                   google()
@@ -189,9 +196,6 @@ jobs:
 
       # ============================================================
       # APP BUILD FILE
-      #
-      # IMPORTANT:
-      # No MainActivity is created by this bootstrap.
       # ============================================================
       - name: Create app/build.gradle.kts
         shell: bash
@@ -218,6 +222,7 @@ jobs:
               }
 
               buildTypes {
+
                   release {
                       isMinifyEnabled = false
                       isShrinkResources = false
@@ -234,6 +239,7 @@ jobs:
               }
 
               packaging {
+
                   jniLibs {
                       useLegacyPackaging = true
                   }
@@ -253,24 +259,32 @@ jobs:
           }
 
           dependencies {
-              implementation(files("libs/filament.aar"))
-              implementation(files("libs/gltfio.aar"))
-              implementation(files("libs/filament-utils-api.aar"))
+
+              implementation(
+                  files("libs/filament.aar")
+              )
+
+              implementation(
+                  files("libs/gltfio.aar")
+              )
+
+              implementation(
+                  files("libs/filament-utils-api.aar")
+              )
           }
           EOF
 
       # ============================================================
       # MANIFEST
-      #
-      # MainActivity is declared for the final viewer, but this
-      # bootstrap deliberately does NOT create MainActivity.kt.
       # ============================================================
       - name: Create AndroidManifest.xml
         shell: bash
         run: |
           cat > app/src/main/AndroidManifest.xml <<'EOF'
           <?xml version="1.0" encoding="utf-8"?>
-          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+          <manifest
+              xmlns:android="http://schemas.android.com/apk/res/android">
 
               <uses-feature
                   android:name="android.hardware.opengles.aep"
@@ -287,18 +301,35 @@ jobs:
                       android:exported="true">
 
                       <intent-filter>
-                          <action android:name="android.intent.action.MAIN" />
-                          <category android:name="android.intent.category.LAUNCHER" />
+
+                          <action
+                              android:name="android.intent.action.MAIN" />
+
+                          <category
+                              android:name="android.intent.category.LAUNCHER" />
+
                       </intent-filter>
 
                       <intent-filter>
-                          <action android:name="android.intent.action.VIEW" />
 
-                          <category android:name="android.intent.category.DEFAULT" />
-                          <category android:name="android.intent.category.BROWSABLE" />
+                          <action
+                              android:name="android.intent.action.VIEW" />
 
-                          <data android:mimeType="model/gltf-binary" />
-                          <data android:mimeType="application/octet-stream" />
+                          <category
+                              android:name="android.intent.category.DEFAULT" />
+
+                          <category
+                              android:name="android.intent.category.BROWSABLE" />
+
+                          <data
+                              android:mimeType="model/gltf-binary" />
+
+                          <data
+                              android:mimeType="model/gltf+json" />
+
+                          <data
+                              android:mimeType="application/octet-stream" />
+
                       </intent-filter>
 
                   </activity>
@@ -316,8 +347,13 @@ jobs:
         run: |
           cat > app/src/main/res/values/strings.xml <<'EOF'
           <?xml version="1.0" encoding="utf-8"?>
+
           <resources>
-              <string name="app_name">PIFuHDC 3D Viewer</string>
+
+              <string name="app_name">
+                  PIFuHDC 3D Viewer
+              </string>
+
           </resources>
           EOF
 
@@ -329,15 +365,24 @@ jobs:
         run: |
           cat > app/src/main/res/values/styles.xml <<'EOF'
           <?xml version="1.0" encoding="utf-8"?>
+
           <resources>
 
               <style
                   name="AppTheme"
                   parent="android:style/Theme.Material.Light.NoActionBar">
 
-                  <item name="android:fontFamily">sans</item>
-                  <item name="android:windowActionModeOverlay">true</item>
-                  <item name="android:colorAccent">#666666</item>
+                  <item name="android:fontFamily">
+                      sans
+                  </item>
+
+                  <item name="android:windowActionModeOverlay">
+                      true
+                  </item>
+
+                  <item name="android:colorAccent">
+                      #666666
+                  </item>
 
               </style>
 
@@ -345,21 +390,71 @@ jobs:
           EOF
 
       # ============================================================
-      # IMPORTANT:
-      # NO MainActivity.kt HERE
+      # SAVE USER MAINACTIVITY
+      #
+      # Your real MainActivity.kt is NEVER deleted.
+      # It is temporarily moved outside the source tree.
       # ============================================================
-      - name: Verify MainActivity is intentionally absent
+      - name: Protect user MainActivity
         shell: bash
         run: |
           set -e
 
-          if [ -f app/src/main/java/com/pifuhdc/viewer/MainActivity.kt ]; then
-            echo "ERROR: MainActivity.kt exists."
-            echo "Bootstrap 2 must not create MainActivity.kt."
-            exit 1
+          ACTIVITY="app/src/main/java/com/pifuhdc/viewer/MainActivity.kt"
+
+          if [ -f "$ACTIVITY" ]; then
+
+              echo "=========================================="
+              echo "PROTECTING USER MAINACTIVITY"
+              echo "=========================================="
+
+              mv "$ACTIVITY" "${ACTIVITY}.user_backup"
+
+              echo "User MainActivity backed up."
+
+          else
+
+              echo "No existing MainActivity found."
+
           fi
 
-          echo "MainActivity.kt is intentionally absent."
+      # ============================================================
+      # TEMPORARY ACTIVITY
+      #
+      # This exists ONLY for the bootstrap build.
+      # ============================================================
+      - name: Create temporary bootstrap MainActivity
+        shell: bash
+        run: |
+          set -e
+
+          cat > \
+            app/src/main/java/com/pifuhdc/viewer/MainActivity.kt \
+            <<'EOF'
+          package com.pifuhdc.viewer
+
+          import android.app.Activity
+          import android.os.Bundle
+          import android.widget.TextView
+
+          class MainActivity : Activity() {
+
+              override fun onCreate(
+                  savedInstanceState: Bundle?
+              ) {
+                  super.onCreate(savedInstanceState)
+
+                  val textView = TextView(this)
+
+                  textView.text =
+                      "PIFuHDC 3D Viewer\nBootstrap OK"
+
+                  setContentView(textView)
+              }
+          }
+          EOF
+
+          echo "Temporary MainActivity created."
 
       # ============================================================
       # GENERATE GRADLE WRAPPER
@@ -384,31 +479,24 @@ jobs:
           ./gradlew --version
 
       # ============================================================
-      # VERIFY PROJECT FILES
+      # VERIFY CONFIGURATION
       # ============================================================
-      - name: Verify project
+      - name: Verify project configuration
         shell: bash
         run: |
           set -e
 
           echo "=========================================="
-          echo "PROJECT TREE"
+          echo "VERIFYING PROJECT"
           echo "=========================================="
-
-          find . \
-            -maxdepth 5 \
-            -type f \
-            ! -path "./.git/*" \
-            | sort
-
-          echo ""
-          echo "Checking critical files..."
 
           test -f settings.gradle.kts
           test -f build.gradle.kts
           test -f gradle.properties
           test -f app/build.gradle.kts
+
           test -f app/src/main/AndroidManifest.xml
+
           test -f app/src/main/res/values/strings.xml
           test -f app/src/main/res/values/styles.xml
 
@@ -416,26 +504,24 @@ jobs:
           test -f app/libs/gltfio.aar
           test -f app/libs/filament-utils-api.aar
 
-          test ! -f app/src/main/java/com/pifuhdc/viewer/MainActivity.kt
+          test -f \
+            app/src/main/java/com/pifuhdc/viewer/MainActivity.kt
 
           echo ""
-          echo "All bootstrap files verified."
+          echo "Configuration verified."
 
       # ============================================================
       # CLEAN
       # ============================================================
-      - name: Clean Gradle project
+      - name: Clean project
         shell: bash
         run: |
           set -e
+
           ./gradlew clean --no-daemon
 
       # ============================================================
-      # BUILD DEBUG APK
-      #
-      # There is intentionally no Kotlin source yet.
-      # This tests the complete Gradle + AGP + SDK + Filament
-      # configuration independently from MainActivity.
+      # BUILD
       # ============================================================
       - name: Build debug APK
         shell: bash
@@ -444,7 +530,6 @@ jobs:
 
           echo "=========================================="
           echo "BUILDING PIFuHDC 3D VIEWER"
-          echo "WITHOUT MAINACTIVITY"
           echo "=========================================="
 
           ./gradlew \
@@ -475,8 +560,8 @@ jobs:
             | head -n 1)
 
           if [ -z "$APK" ]; then
-            echo "ERROR: APK was not generated."
-            exit 1
+              echo "ERROR: APK was not generated."
+              exit 1
           fi
 
           echo ""
@@ -490,7 +575,7 @@ jobs:
       # ============================================================
       # UPLOAD APK
       # ============================================================
-      - name: Upload debug APK
+      - name: Upload bootstrap APK
         uses: actions/upload-artifact@v4
         with:
           name: PIFuHDC-3D-Viewer-debug-bootstrap
@@ -498,21 +583,33 @@ jobs:
           if-no-files-found: error
 
       # ============================================================
-      # COMMIT GENERATED PROJECT
+      # ALWAYS RESTORE USER MAINACTIVITY
+      #
+      # This runs even when the build fails.
       # ============================================================
-      - name: Commit generated project
+      - name: Restore user MainActivity
+        if: always()
         shell: bash
         run: |
           set -e
 
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          ACTIVITY="app/src/main/java/com/pifuhdc/viewer/MainActivity.kt"
+          BACKUP="${ACTIVITY}.user_backup"
 
-          git add .
+          echo "=========================================="
+          echo "RESTORING USER MAINACTIVITY"
+          echo "=========================================="
 
-          if git diff --cached --quiet; then
-            echo "No changes to commit."
+          rm -f "$ACTIVITY"
+
+          if [ -f "$BACKUP" ]; then
+
+              mv "$BACKUP" "$ACTIVITY"
+
+              echo "Original MainActivity.kt restored."
+
           else
-            git commit -m "Bootstrap 2: Android GLB viewer project without MainActivity"
-            git push
+
+              echo "No user MainActivity backup found."
+
           fi
