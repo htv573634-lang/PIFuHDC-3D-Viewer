@@ -112,17 +112,15 @@ class DuckTestActivity : Activity() {
             val viewer = ModelViewer(textureView)
             modelViewer = viewer
 
-            // White sky background
             viewer.scene.skybox = Skybox.Builder()
                 .color(floatArrayOf(0.95f, 0.95f, 1.0f, 1.0f))
                 .build(viewer.engine)
 
-            // Sun light
             val sun = EntityManager.get().create()
 
             LightManager.Builder(LightManager.Type.DIRECTIONAL)
                 .color(1.0f, 1.0f, 1.0f)
-                .intensity(120_000f)
+                .intensity(120000f)
                 .direction(-0.6f, -1.0f, -0.8f)
                 .castShadows(true)
                 .build(viewer.engine, sun)
@@ -208,17 +206,11 @@ class DuckTestActivity : Activity() {
 
             buffer.position(0)
 
-            val viewer = modelViewer ?: throw Exception("Renderer not initialized")
+            val viewer = modelViewer
+                ?: throw Exception("Renderer not initialized")
 
             viewer.loadModelGlb(buffer)
             viewer.transformToUnitCube()
-
-            viewer.asset?.animator?.apply {
-                if (animationCount > 0) {
-                    applyAnimation(0, 0f)
-                    updateBoneMatrices()
-                }
-            }
 
             statusText.text = "GLB loaded ✓"
 
@@ -236,6 +228,7 @@ class DuckTestActivity : Activity() {
 
     private val frameCallback =
         object : Choreographer.FrameCallback {
+
             override fun doFrame(frameTimeNanos: Long) {
 
                 if (!rendering) return
