@@ -1,0 +1,1481 @@
+name: Bootstrap 4 - Model Analysis Report
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    name: Analyze Repository and Models
+    runs-on: ubuntu-latest
+
+    steps:
+
+      # ============================================================
+      # 1. CHECKOUT
+      # ============================================================
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+
+      # ============================================================
+      # 2. PYTHON
+      # ============================================================
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+
+      # ============================================================
+      # 3. INSTALL ANALYSIS TOOLS
+      # ============================================================
+      - name: Install analysis tools
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install python-docx
+
+
+      # ============================================================
+      # 4. CREATE ANALYSIS SCRIPT
+      # ============================================================
+      - name: Create analysis script
+        run: |
+          cat > analyze_repo.py <<'PYTHON'
+          import os
+          import re
+          import json
+          import struct
+          import hashlib
+          import mimetypes
+          from pathlib import Path
+          from datetime import datetime, timezone
+
+          from docx import Document
+          from docx.shared import Pt, Inches
+          from docx.enum.text import WD_ALIGN_PARAGRAPH
+          from docx.enum.table import WD_TABLE_ALIGNMENT
+          from docx.oxml import OxmlElement
+          from docx.oxml.ns import qn
+
+
+          ROOT = Path(".").resolve()
+          OUTPUT = ROOT / "PIFuHDC_Model_Analysis.docx"
+
+          IGNORE_DIRS = {
+              ".git",
+              ".gradle",
+              ".idea",
+              "build",
+              ".github/workflows",
+              "__pycache__",
+              "node_modules",
+          }
+
+          MODEL_EXTENSIONS = {
+              ".onnx",
+              ".tflite",
+              ".mnn",
+              ".mlmodel",
+              ".safetensors",
+              ".pt",
+              ".pth",
+              ".bin",
+              ".ckpt",
+              ".pb",
+              ".h5",
+              ".keras",
+              ".gguf",
+              ".ggml",
+              ".glb",
+              ".gltf",
+          }
+
+          CODE_EXTENSIONS = {
+              ".kt",
+              ".java",
+              ".cpp",
+              ".cc",
+              ".c",
+              ".h",
+              ".hpp",
+              ".gradle",
+              ".kts",
+              ".xml",
+              ".json",
+              ".properties",
+              ".yml",
+              ".yaml",
+          }
+
+
+          # ------------------------------------------------------------
+          # Utilities
+          # ------------------------------------------------------------
+
+          def sha256_file(path):
+              h = hashlib.sha256()
+              try:
+                  with open(path, "rb") as f:
+                      for block in iter(lambda: f.read(1024 * 1024), b""):
+                          h.update(block)
+                  return h.hexdigest()
+              except Exception as e:
+                  return f"ERROR: {e}"
+
+
+          def human_size(size):
+              units = ["B", "KB", "MB", "GB"]
+              value = float(size)
+
+              for unit in units:
+                  if value < 1024:
+                      return f"{value:.2f} {unit}"
+                  value /= 1024
+
+              return f"{value:.2f} TB"
+
+
+          def safe_read_text(path, max_bytes=2_000_000):
+              try:
+                  if path.stat().st_size > max_bytes:
+                      return None
+
+                  return path.read_text(
+                      encoding="utf-8",
+                      errors="replace"
+                  )
+              except Exception:
+                  return None
+
+
+          def add_heading(doc, text, level=1):
+              p = doc.add_heading(text, level=level)
+              return p
+
+
+          def add_code(doc, text):
+              if not text:
+                  return
+
+              p = doc.add_paragraph()
+
+              for line in text.splitlines():
+                  r = p.add_run(line + "\n")
+                  r.font.name = "Consolas"
+                  r.font.size = Pt(8)
+
+          def add_bullet(doc, text, level=0):
+              style = "List Bullet"
+              if level > 0:
+                  style = "List Bullet 2"
+
+              doc.add_paragraph(text, style=style)
+
+
+          def shade_cell(cell, fill="D9EAF7"):
+              tc_pr = cell._tc.get_or_add_tcPr()
+              shd = OxmlElement("w:shd")
+              shd.set(qn("w:fill"), fill)
+              tc_pr.append(shd)
+
+
+          def add_table(doc, headers, rows):
+              table = doc.add_table(
+                  rows=1,
+                  cols=len(headers)
+              )
+
+              table.alignment = WD_TABLE_ALIGNMENT.CENTER
+              table.style = "Table Grid"
+
+              for i, header in enumerate(headers):
+                  cell = table.rows[0].cells[i]
+                  cell.text = str(header)
+                  shade_cell(cell)
+
+              for row in rows:
+                  cells = table.add_row().cells
+
+                  for i, value in enumerate(row):
+                      cells[i].text = str(value)
+
+              return table
+
+
+          # ------------------------------------------------------------
+          # Repository scan
+          # ------------------------------------------------------------
+
+          def iter_files():
+              for root, dirs, files in os.walk(ROOT):
+
+                  relative_root = Path(root).relative_to(ROOT)
+
+                  filtered = []
+
+                  for d in dirs:
+                      rel = str(relative_root / d)
+
+                      if d in IGNORE_DIRS:
+                          continue
+
+                      if rel.startswith(".git"):
+                          continue
+
+                      filtered.append(d)
+
+                  dirs[:] = filtered
+
+                  for filename in files:
+                      path = Path(root) / filename
+
+                      if ".git" in path.parts:
+                          continue
+
+                      yield path
+
+
+          all_files = list(iter_files())
+
+          model_files = [
+              p for p in all_files
+              if p.suffix.lower() in MODEL_EXTENSIONS
+          ]
+
+          code_files = [
+              p for p in all_files
+              if p.suffix.lower() in CODE_EXTENSIONS
+          ]
+
+
+          # ------------------------------------------------------------
+          # GLB analysis
+          # ------------------------------------------------------------
+
+          def analyze_glb(path):
+
+              result = {
+                  "file": str(path.relative_to(ROOT)),
+                  "size": path.stat().st_size,
+                  "sha256": sha256_file(path),
+                  "valid": False,
+                  "magic": "",
+                  "version": None,
+                  "declared_length": None,
+                  "actual_length": path.stat().st_size,
+                  "chunks": [],
+                  "json": None,
+              }
+
+              try:
+                  data = path.read_bytes()
+
+                  if len(data) < 12:
+                      result["error"] = "File shorter than GLB header"
+                      return result
+
+                  magic, version, length = struct.unpack(
+                      "<4sII",
+                      data[:12]
+                  )
+
+                  result["magic"] = magic.decode(
+                      "ascii",
+                      errors="replace"
+                  )
+
+                  result["version"] = version
+                  result["declared_length"] = length
+
+                  if magic != b"glTF":
+                      result["error"] = "Invalid GLB magic"
+                      return result
+
+                  if version != 2:
+                      result["error"] = (
+                          f"Unsupported GLB version {version}"
+                      )
+                      return result
+
+                  offset = 12
+
+                  while offset + 8 <= len(data):
+
+                      chunk_length, chunk_type = struct.unpack(
+                          "<II",
+                          data[offset:offset + 8]
+                      )
+
+                      chunk_start = offset + 8
+                      chunk_end = chunk_start + chunk_length
+
+                      chunk_name = (
+                          chunk_type.to_bytes(
+                              4,
+                              "little"
+                          ).decode(
+                              "ascii",
+                              errors="replace"
+                          )
+                      )
+
+                      result["chunks"].append({
+                          "type": chunk_name,
+                          "length": chunk_length
+                      })
+
+                      chunk_data = data[
+                          chunk_start:chunk_end
+                      ]
+
+                      if chunk_name == "JSON":
+
+                          try:
+                              text = chunk_data.decode(
+                                  "utf-8"
+                              ).rstrip("\x00 ")
+
+                              result["json"] = json.loads(text)
+
+                          except Exception as e:
+                              result["json_error"] = str(e)
+
+                      offset = chunk_end
+
+                  result["valid"] = True
+
+              except Exception as e:
+                  result["error"] = str(e)
+
+              return result
+
+
+          # ------------------------------------------------------------
+          # GLTF JSON analysis
+          # ------------------------------------------------------------
+
+          def summarize_gltf(gltf):
+
+              if not gltf:
+                  return {}
+
+              summary = {}
+
+              summary["asset"] = gltf.get("asset", {})
+              summary["scene"] = gltf.get("scene")
+              summary["scenes"] = len(
+                  gltf.get("scenes", [])
+              )
+              summary["nodes"] = len(
+                  gltf.get("nodes", [])
+              )
+              summary["meshes"] = len(
+                  gltf.get("meshes", [])
+              )
+              summary["primitives"] = sum(
+                  len(mesh.get("primitives", []))
+                  for mesh in gltf.get("meshes", [])
+              )
+              summary["materials"] = len(
+                  gltf.get("materials", [])
+              )
+              summary["textures"] = len(
+                  gltf.get("textures", [])
+              )
+              summary["images"] = len(
+                  gltf.get("images", [])
+              )
+              summary["buffers"] = len(
+                  gltf.get("buffers", [])
+              )
+              summary["bufferViews"] = len(
+                  gltf.get("bufferViews", [])
+              )
+              summary["accessors"] = len(
+                  gltf.get("accessors", [])
+              )
+              summary["cameras"] = len(
+                  gltf.get("cameras", [])
+              )
+              summary["animations"] = len(
+                  gltf.get("animations", [])
+              )
+              summary["skins"] = len(
+                  gltf.get("skins", [])
+              )
+              summary["lights"] = 0
+
+              extensions = gltf.get(
+                  "extensions",
+                  {}
+              )
+
+              for key in extensions:
+                  if "light" in key.lower():
+                      summary["lights"] = (
+                          len(
+                              extensions[key].get(
+                                  "lights",
+                                  []
+                              )
+                          )
+                      )
+
+              return summary
+
+
+          # ------------------------------------------------------------
+          # Source-code references
+          # ------------------------------------------------------------
+
+          MODEL_TERMS = [
+              "loadModelGlb",
+              "loadModelGltf",
+              "ModelViewer",
+              "AssetLoader",
+              "FilamentAsset",
+              "transformToUnitCube",
+              "render(",
+              ".onnx",
+              ".tflite",
+              ".mnn",
+              ".glb",
+              ".gltf",
+              "Interpreter",
+              "Session",
+              "InferenceSession",
+              "OpenGL",
+              "OpenCL",
+              "Vulkan",
+          ]
+
+
+          references = []
+
+          for path in code_files:
+
+              text = safe_read_text(path)
+
+              if not text:
+                  continue
+
+              lines = text.splitlines()
+
+              for number, line in enumerate(lines, 1):
+
+                  for term in MODEL_TERMS:
+
+                      if term.lower() in line.lower():
+
+                          references.append({
+                              "file": str(
+                                  path.relative_to(ROOT)
+                              ),
+                              "line": number,
+                              "term": term,
+                              "text": line.strip()[:500],
+                          })
+
+                          break
+
+
+          # ------------------------------------------------------------
+          # Dependency analysis
+          # ------------------------------------------------------------
+
+          dependency_files = []
+
+          for path in all_files:
+
+              name = path.name.lower()
+
+              if (
+                  name == "build.gradle"
+                  or name == "build.gradle.kts"
+                  or name == "settings.gradle"
+                  or name == "settings.gradle.kts"
+                  or name == "gradle.properties"
+                  or name.endswith(".toml")
+              ):
+                  dependency_files.append(path)
+
+
+          # ------------------------------------------------------------
+          # Android input/output analysis
+          # ------------------------------------------------------------
+
+          input_keywords = [
+              "Intent.ACTION_OPEN_DOCUMENT",
+              "ACTION_OPEN_DOCUMENT",
+              "EXTRA_MIME_TYPES",
+              "Uri",
+              "openInputStream",
+              "readBytes",
+              "ByteBuffer",
+              "loadModelGlb",
+          ]
+
+          input_references = []
+
+          for path in code_files:
+
+              text = safe_read_text(path)
+
+              if not text:
+                  continue
+
+              lines = text.splitlines()
+
+              for number, line in enumerate(lines, 1):
+
+                  for term in input_keywords:
+
+                      if term.lower() in line.lower():
+
+                          input_references.append({
+                              "file": str(
+                                  path.relative_to(ROOT)
+                              ),
+                              "line": number,
+                              "term": term,
+                              "text": line.strip()[:500],
+                          })
+
+                          break
+
+
+          # ------------------------------------------------------------
+          # Create Word document
+          # ------------------------------------------------------------
+
+          doc = Document()
+
+          section = doc.sections[0]
+          section.top_margin = Inches(0.6)
+          section.bottom_margin = Inches(0.6)
+          section.left_margin = Inches(0.7)
+          section.right_margin = Inches(0.7)
+
+          title = doc.add_paragraph()
+          title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+          run = title.add_run(
+              "PIFuHDC 3D Viewer\n"
+              "Repository & Model Analysis Report"
+          )
+
+          run.bold = True
+          run.font.size = Pt(22)
+
+          subtitle = doc.add_paragraph()
+          subtitle.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+          subtitle.add_run(
+              "Inspection-only analysis • No source files modified"
+          ).italic = True
+
+          doc.add_paragraph(
+              "Generated: " +
+              datetime.now(
+                  timezone.utc
+              ).strftime(
+                  "%Y-%m-%d %H:%M:%S UTC"
+              )
+          )
+
+          # ------------------------------------------------------------
+          # Executive summary
+          # ------------------------------------------------------------
+
+          add_heading(
+              doc,
+              "1. Executive Summary",
+              1
+          )
+
+          doc.add_paragraph(
+              "This report analyzes the repository as checked out by "
+              "GitHub Actions. It identifies model files, graphics "
+              "assets, Android rendering code, model-loading code, "
+              "dependencies, and input/output paths."
+          )
+
+          add_table(
+              doc,
+              [
+                  "Metric",
+                  "Value"
+              ],
+              [
+                  [
+                      "Total files",
+                      len(all_files)
+                  ],
+                  [
+                      "Model files",
+                      len(model_files)
+                  ],
+                  [
+                      "Source/config files",
+                      len(code_files)
+                  ],
+                  [
+                      "GLB/GLTF files",
+                      sum(
+                          1
+                          for p in model_files
+                          if p.suffix.lower()
+                          in {".glb", ".gltf"}
+                      )
+                  ],
+              ]
+          )
+
+          # ------------------------------------------------------------
+          # Repository tree
+          # ------------------------------------------------------------
+
+          add_heading(
+              doc,
+              "2. Repository File Inventory",
+              1
+          )
+
+          for path in sorted(all_files):
+
+              rel = path.relative_to(ROOT)
+
+              try:
+                  size = human_size(
+                      path.stat().st_size
+                  )
+              except Exception:
+                  size = "unknown"
+
+              doc.add_paragraph(
+                  f"{rel}  ({size})"
+              )
+
+          # ------------------------------------------------------------
+          # Model inventory
+          # ------------------------------------------------------------
+
+          add_heading(
+              doc,
+              "3. Model & 3D Asset Inventory",
+              1
+          )
+
+          if not model_files:
+
+              doc.add_paragraph(
+                  "No recognized model files were found."
+              )
+
+          else:
+
+              rows = []
+
+              for path in sorted(model_files):
+
+                  rows.append([
+                      str(
+                          path.relative_to(ROOT)
+                      ),
+                      path.suffix.lower(),
+                      human_size(
+                          path.stat().st_size
+                      ),
+                      sha256_file(path),
+                  ])
+
+              add_table(
+                  doc,
+                  [
+                      "File",
+                      "Type",
+                      "Size",
+                      "SHA-256"
+                  ],
+                  rows
+              )
+
+          # ------------------------------------------------------------
+          # GLB detailed analysis
+          # ------------------------------------------------------------
+
+          glb_files = [
+              p
+              for p in model_files
+              if p.suffix.lower() == ".glb"
+          ]
+
+          add_heading(
+              doc,
+              "4. GLB Detailed Analysis",
+              1
+          )
+
+          if not glb_files:
+
+              doc.add_paragraph(
+                  "No GLB files found in the repository."
+              )
+
+          for path in glb_files:
+
+              result = analyze_glb(path)
+
+              add_heading(
+                  doc,
+                  str(path.relative_to(ROOT)),
+                  2
+              )
+
+              add_table(
+                  doc,
+                  [
+                      "Property",
+                      "Value"
+                  ],
+                  [
+                      [
+                          "Valid GLB",
+                          result.get("valid")
+                      ],
+                      [
+                          "Magic",
+                          result.get("magic")
+                      ],
+                      [
+                          "Version",
+                          result.get("version")
+                      ],
+                      [
+                          "Declared length",
+                          result.get(
+                              "declared_length"
+                          )
+                      ],
+                      [
+                          "Actual length",
+                          result.get(
+                              "actual_length"
+                          )
+                      ],
+                      [
+                          "SHA-256",
+                          result.get(
+                              "sha256"
+                          )
+                      ],
+                  ]
+              )
+
+              if result.get("error"):
+                  doc.add_paragraph(
+                      "ERROR: " +
+                      str(result["error"])
+                  )
+
+              if result.get("chunks"):
+
+                  add_heading(
+                      doc,
+                      "GLB chunks",
+                      3
+                  )
+
+                  add_table(
+                      doc,
+                      [
+                          "Chunk",
+                          "Length"
+                      ],
+                      [
+                          [
+                              c["type"],
+                              c["length"]
+                          ]
+                          for c
+                          in result["chunks"]
+                      ]
+                  )
+
+              summary = summarize_gltf(
+                  result.get("json")
+              )
+
+              if summary:
+
+                  add_heading(
+                      doc,
+                      "GLTF structure",
+                      3
+                  )
+
+                  rows = []
+
+                  for key, value in summary.items():
+                      rows.append([
+                          key,
+                          json.dumps(
+                              value,
+                              ensure_ascii=False
+                          )
+                          if isinstance(
+                              value,
+                              (dict, list)
+                          )
+                          else value
+                      ])
+
+                  add_table(
+                      doc,
+                      [
+                          "Property",
+                          "Value"
+                      ],
+                      rows
+                  )
+
+                  gltf = result.get("json")
+
+                  # Scenes
+                  add_heading(
+                      doc,
+                      "Scenes",
+                      3
+                  )
+
+                  for i, scene in enumerate(
+                      gltf.get("scenes", [])
+                  ):
+
+                      doc.add_paragraph(
+                          f"Scene {i}: "
+                          f"{json.dumps(scene)}"
+                      )
+
+                  # Nodes
+                  add_heading(
+                      doc,
+                      "Nodes",
+                      3
+                  )
+
+                  for i, node in enumerate(
+                      gltf.get("nodes", [])
+                  ):
+
+                      doc.add_paragraph(
+                          f"Node {i}: "
+                          f"{json.dumps(node)}"
+                      )
+
+                  # Meshes
+                  add_heading(
+                      doc,
+                      "Meshes and primitives",
+                      3
+                  )
+
+                  for i, mesh in enumerate(
+                      gltf.get("meshes", [])
+                  ):
+
+                      doc.add_paragraph(
+                          f"Mesh {i}: "
+                          f"{mesh.get('name', '')}"
+                      )
+
+                      for j, primitive in enumerate(
+                          mesh.get(
+                              "primitives",
+                              []
+                          )
+                      ):
+
+                          doc.add_paragraph(
+                              f"  Primitive {j}: "
+                              f"attributes="
+                              f"{json.dumps(primitive.get('attributes', {}))}, "
+                              f"indices="
+                              f"{primitive.get('indices')}, "
+                              f"material="
+                              f"{primitive.get('material')}"
+                          )
+
+                  # Materials
+                  add_heading(
+                      doc,
+                      "Materials",
+                      3
+                  )
+
+                  for i, material in enumerate(
+                      gltf.get("materials", [])
+                  ):
+
+                      doc.add_paragraph(
+                          f"Material {i}: "
+                          f"{json.dumps(material)}"
+                      )
+
+                  # Cameras
+                  add_heading(
+                      doc,
+                      "Cameras",
+                      3
+                  )
+
+                  for i, camera in enumerate(
+                      gltf.get("cameras", [])
+                  ):
+
+                      doc.add_paragraph(
+                          f"Camera {i}: "
+                          f"{json.dumps(camera)}"
+                      )
+
+                  # Animations
+                  add_heading(
+                      doc,
+                      "Animations",
+                      3
+                  )
+
+                  for i, animation in enumerate(
+                      gltf.get("animations", [])
+                  ):
+
+                      doc.add_paragraph(
+                          f"Animation {i}: "
+                          f"{json.dumps(animation)}"
+                      )
+
+          # ------------------------------------------------------------
+          # GLTF JSON files
+          # ------------------------------------------------------------
+
+          gltf_files = [
+              p
+              for p in model_files
+              if p.suffix.lower() == ".gltf"
+          ]
+
+          add_heading(
+              doc,
+              "5. GLTF JSON Analysis",
+              1
+          )
+
+          for path in gltf_files:
+
+              text = safe_read_text(path)
+
+              add_heading(
+                  doc,
+                  str(path.relative_to(ROOT)),
+                  2
+              )
+
+              if text:
+
+                  try:
+                      data = json.loads(text)
+
+                      summary = summarize_gltf(data)
+
+                      add_table(
+                          doc,
+                          [
+                              "Property",
+                              "Value"
+                          ],
+                          [
+                              [
+                                  k,
+                                  json.dumps(v)
+                                  if isinstance(
+                                      v,
+                                      (dict, list)
+                                  )
+                                  else v
+                              ]
+                              for k, v
+                              in summary.items()
+                          ]
+                      )
+
+                  except Exception as e:
+
+                      doc.add_paragraph(
+                          f"JSON parse error: {e}"
+                      )
+
+              else:
+
+                  doc.add_paragraph(
+                      "Unable to read file."
+                  )
+
+          # ------------------------------------------------------------
+          # Code references
+          # ------------------------------------------------------------
+
+          add_heading(
+              doc,
+              "6. Model Loading & Rendering Code",
+              1
+          )
+
+          if not references:
+
+              doc.add_paragraph(
+                  "No known model/rendering references found."
+              )
+
+          else:
+
+              rows = []
+
+              for ref in references:
+
+                  rows.append([
+                      ref["file"],
+                      ref["line"],
+                      ref["term"],
+                      ref["text"],
+                  ])
+
+              add_table(
+                  doc,
+                  [
+                      "File",
+                      "Line",
+                      "Detected API/term",
+                      "Code"
+                  ],
+                  rows
+              )
+
+          # ------------------------------------------------------------
+          # Input pipeline
+          # ------------------------------------------------------------
+
+          add_heading(
+              doc,
+              "7. Input Pipeline",
+              1
+          )
+
+          doc.add_paragraph(
+              "The following source locations contain code related "
+              "to selecting, reading, decoding, or passing model "
+              "input into the rendering/inference pipeline."
+          )
+
+          rows = []
+
+          for ref in input_references:
+
+              rows.append([
+                  ref["file"],
+                  ref["line"],
+                  ref["term"],
+                  ref["text"],
+              ])
+
+          if rows:
+
+              add_table(
+                  doc,
+                  [
+                      "File",
+                      "Line",
+                      "Input operation",
+                      "Code"
+                  ],
+                  rows
+              )
+
+          else:
+
+              doc.add_paragraph(
+                  "No recognized input pipeline references found."
+              )
+
+          # ------------------------------------------------------------
+          # Dependencies
+          # ------------------------------------------------------------
+
+          add_heading(
+              doc,
+              "8. Android & Dependency Configuration",
+              1
+          )
+
+          for path in dependency_files:
+
+              add_heading(
+                  doc,
+                  str(path.relative_to(ROOT)),
+                  2
+              )
+
+              text = safe_read_text(
+                  path,
+                  max_bytes=5_000_000
+              )
+
+              if text:
+                  add_code(doc, text)
+
+          # ------------------------------------------------------------
+          # Filament-specific analysis
+          # ------------------------------------------------------------
+
+          add_heading(
+              doc,
+              "9. Filament Rendering Analysis",
+              1
+          )
+
+          filament_terms = [
+              "filament-android",
+              "gltfio-android",
+              "filament-utils-android",
+              "ModelViewer",
+              "TextureView",
+              "SurfaceView",
+              "Engine",
+              "Renderer",
+              "View",
+              "Camera",
+              "Scene",
+              "IndirectLight",
+              "Skybox",
+              "LightManager",
+              "EntityManager",
+              "transformToUnitCube",
+              "loadModelGlb",
+          ]
+
+          filament_hits = []
+
+          for path in code_files:
+
+              text = safe_read_text(path)
+
+              if not text:
+                  continue
+
+              for number, line in enumerate(
+                  text.splitlines(),
+                  1
+              ):
+
+                  for term in filament_terms:
+
+                      if term.lower() in line.lower():
+
+                          filament_hits.append([
+                              str(
+                                  path.relative_to(ROOT)
+                              ),
+                              number,
+                              term,
+                              line.strip()[:500]
+                          ])
+
+                          break
+
+          if filament_hits:
+
+              add_table(
+                  doc,
+                  [
+                      "File",
+                      "Line",
+                      "Filament item",
+                      "Code"
+                  ],
+                  filament_hits
+              )
+
+          else:
+
+              doc.add_paragraph(
+                  "No Filament references detected."
+              )
+
+          # ------------------------------------------------------------
+          # Android manifest
+          # ------------------------------------------------------------
+
+          add_heading(
+              doc,
+              "10. Android Manifest Analysis",
+              1
+          )
+
+          manifests = [
+              p
+              for p in all_files
+              if p.name == "AndroidManifest.xml"
+          ]
+
+          for path in manifests:
+
+              add_heading(
+                  doc,
+                  str(path.relative_to(ROOT)),
+                  2
+              )
+
+              text = safe_read_text(
+                  path,
+                  max_bytes=2_000_000
+              )
+
+              if text:
+                  add_code(doc, text)
+
+          # ------------------------------------------------------------
+          # Important model facts
+          # ------------------------------------------------------------
+
+          add_heading(
+              doc,
+              "11. What Each Model Requires",
+              1
+          )
+
+          doc.add_paragraph(
+              "This section is generated from information that can "
+              "be established directly from the repository files. "
+              "It deliberately does not invent model inputs or outputs "
+              "when they are not present in the repository."
+          )
+
+          for path in model_files:
+
+              add_heading(
+                  doc,
+                  str(path.relative_to(ROOT)),
+                  2
+              )
+
+              suffix = path.suffix.lower()
+
+              if suffix == ".glb":
+
+                  result = analyze_glb(path)
+                  summary = summarize_gltf(
+                      result.get("json")
+                  )
+
+                  if summary:
+
+                      doc.add_paragraph(
+                          "3D input: GLB binary."
+                      )
+
+                      doc.add_paragraph(
+                          "Renderable structure detected: "
+                          f"{summary.get('meshes', 0)} meshes, "
+                          f"{summary.get('primitives', 0)} primitives, "
+                          f"{summary.get('materials', 0)} materials."
+                      )
+
+                      doc.add_paragraph(
+                          "Cameras in file: "
+                          f"{summary.get('cameras', 0)}"
+                      )
+
+                      doc.add_paragraph(
+                          "Animations in file: "
+                          f"{summary.get('animations', 0)}"
+                      )
+
+                  else:
+
+                      doc.add_paragraph(
+                          "Unable to determine GLTF JSON structure."
+                      )
+
+              else:
+
+                  doc.add_paragraph(
+                      f"Recognized model format: {suffix}"
+                  )
+
+                  doc.add_paragraph(
+                      "Detailed tensor input/output metadata "
+                      "requires a format-specific parser and/or "
+                      "model runtime. The repository scan records "
+                      "the model file, size, hash, and all source "
+                      "references to it."
+                  )
+
+          # ------------------------------------------------------------
+          # Potential issues
+          # ------------------------------------------------------------
+
+          add_heading(
+              doc,
+              "12. Potential Issues / Investigation Targets",
+              1
+          )
+
+          issues = []
+
+          for path in glb_files:
+
+              result = analyze_glb(path)
+
+              if not result.get("valid"):
+
+                  issues.append(
+                      f"{path.relative_to(ROOT)}: "
+                      f"GLB validation failed."
+                  )
+
+              if result.get("declared_length") is not None:
+
+                  if (
+                      result["declared_length"]
+                      != result["actual_length"]
+                  ):
+
+                      issues.append(
+                          f"{path.relative_to(ROOT)}: "
+                          "declared GLB length differs from "
+                          "actual file size."
+                      )
+
+          if not glb_files:
+
+              issues.append(
+                  "No GLB asset is currently present in the repository. "
+                  "If the application expects the user to select a GLB "
+                  "externally, the report will document that path."
+              )
+
+          if not references:
+
+              issues.append(
+                  "No model/rendering API references were detected."
+              )
+
+          if issues:
+
+              for issue in issues:
+                  add_bullet(doc, issue)
+
+          else:
+
+              doc.add_paragraph(
+                  "No automatic structural issues were detected "
+                  "by this inspection script."
+              )
+
+          # ------------------------------------------------------------
+          # Final architecture map
+          # ------------------------------------------------------------
+
+          add_heading(
+              doc,
+              "13. Current Input → Processing → Output Map",
+              1
+          )
+
+          doc.add_paragraph(
+              "Repository-level architecture inferred from the "
+              "detected source code:"
+          )
+
+          architecture = [
+              "1. Android UI / Activity",
+              "2. User selects or supplies a GLB/GLTF input",
+              "3. Android reads the selected file",
+              "4. GLB bytes are parsed/validated",
+              "5. Filament ModelViewer receives the GLB",
+              "6. Filament AssetLoader creates scene/renderable objects",
+              "7. Model transforms/camera/scene are configured",
+              "8. Filament renderer renders frames",
+              "9. Android Surface/Texture view displays the rendered frame",
+          ]
+
+          for item in architecture:
+              add_bullet(doc, item)
+
+          # ------------------------------------------------------------
+          # Reproducibility
+          # ------------------------------------------------------------
+
+          add_heading(
+              doc,
+              "14. Reproducibility Information",
+              1
+          )
+
+          doc.add_paragraph(
+              "This report was generated by GitHub Actions from a "
+              "read-only checkout. No application source files are "
+              "modified by the analysis script."
+          )
+
+          doc.add_paragraph(
+              f"Repository root: {ROOT}"
+          )
+
+          doc.add_paragraph(
+              f"Analysis timestamp: "
+              f"{datetime.now(timezone.utc).isoformat()}"
+          )
+
+          # ------------------------------------------------------------
+          # Save
+          # ------------------------------------------------------------
+
+          doc.save(OUTPUT)
+
+          print(
+              f"Created: {OUTPUT}"
+          )
+          print(
+              f"Files scanned: {len(all_files)}"
+          )
+          print(
+              f"Models found: {len(model_files)}"
+          )
+          print(
+              f"Code/config files found: {len(code_files)}"
+          )
+          PYTHON
+
+
+      # ============================================================
+      # 5. RUN ANALYSIS
+      # ============================================================
+      - name: Run repository and model analysis
+        run: |
+          python analyze_repo.py
+
+
+      # ============================================================
+      # 6. UPLOAD WORD REPORT
+      # ============================================================
+      - name: Upload Word analysis report
+        uses: actions/upload-artifact@v4
+        with:
+          name: PIFuHDC-Model-Analysis-Report
+          path: PIFuHDC_Model_Analysis.docx
+          if-no-files-found: error
