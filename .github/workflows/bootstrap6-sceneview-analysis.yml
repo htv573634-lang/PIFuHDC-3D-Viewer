@@ -1,0 +1,1003 @@
+name: Bootstrap 6 - SceneView Compatibility Analysis
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sceneview-analysis:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout PIFuHDC-3D-Viewer
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install report tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install python-docx
+
+      - name: Clone exact SceneView 4.37.0
+        run: |
+          set -e
+
+          mkdir -p analysis/sceneview
+
+          git clone \
+            --depth 1 \
+            --branch v4.37.0 \
+            https://github.com/SceneView/sceneview.git \
+            analysis/sceneview/source
+
+          cd analysis/sceneview/source
+
+          echo "SceneView commit:"
+          git rev-parse HEAD
+
+          echo
+          echo "SceneView version:"
+          git describe --tags --always
+
+      - name: Download SceneView Maven artifacts
+        run: |
+          set -e
+
+          mkdir -p analysis/maven
+
+          BASE="https://repo1.maven.org/maven2/io/github/sceneview"
+
+          curl -L --fail --retry 3 \
+            -o analysis/maven/sceneview-4.37.0.aar \
+            "$BASE/sceneview/4.37.0/sceneview-4.37.0.aar"
+
+          curl -L --fail --retry 3 \
+            -o analysis/maven/sceneview-core-4.37.0.aar \
+            "$BASE/sceneview-core/4.37.0/sceneview-core-4.37.0.aar"
+
+          curl -L --fail --retry 3 \
+            -o analysis/maven/sceneview-core-android-4.37.0.aar \
+            "$BASE/sceneview-core-android/4.37.0/sceneview-core-android-4.37.0.aar"
+
+          echo "Downloaded artifacts:"
+          ls -lh analysis/maven/
+
+      - name: Download SceneView POM
+        run: |
+          set -e
+
+          curl -L --fail --retry 3 \
+            -o analysis/maven/sceneview-4.37.0.pom \
+            https://repo1.maven.org/maven2/io/github/sceneview/sceneview/4.37.0/sceneview-4.37.0.pom
+
+          curl -L --fail --retry 3 \
+            -o analysis/maven/sceneview-core-4.37.0.pom \
+            https://repo1.maven.org/maven2/io/github/sceneview/sceneview-core/4.37.0/sceneview-core-4.37.0.pom
+
+      - name: Inspect current project configuration
+        run: |
+          set -e
+
+          mkdir -p analysis/project
+
+          {
+            echo "============================================================"
+            echo "PROJECT TREE"
+            echo "============================================================"
+
+            find app/src/main \
+              -type f \
+              | sort
+
+            echo
+            echo "============================================================"
+            echo "app/build.gradle.kts"
+            echo "============================================================"
+
+            nl -ba app/build.gradle.kts
+
+            echo
+            echo "============================================================"
+            echo "root build.gradle.kts"
+            echo "============================================================"
+
+            nl -ba build.gradle.kts
+
+            echo
+            echo "============================================================"
+            echo "settings.gradle.kts"
+            echo "============================================================"
+
+            nl -ba settings.gradle.kts
+
+            echo
+            echo "============================================================"
+            echo "gradle.properties"
+            echo "============================================================"
+
+            nl -ba gradle.properties
+
+            echo
+            echo "============================================================"
+            echo "AndroidManifest.xml"
+            echo "============================================================"
+
+            nl -ba app/src/main/AndroidManifest.xml
+
+          } > analysis/project/current_project.txt
+
+          cat analysis/project/current_project.txt
+
+      - name: Extract current rendering source
+        run: |
+          set -e
+
+          mkdir -p analysis/project/source
+
+          find app/src/main \
+            -type f \
+            \( \
+              -name "*.kt" -o \
+              -name "*.java" -o \
+              -name "*.xml" \
+            \) \
+            -print \
+            | sort \
+            > analysis/project/source/file_list.txt
+
+          while IFS= read -r file; do
+
+            echo
+            echo "============================================================"
+            echo "FILE: $file"
+            echo "============================================================"
+
+            nl -ba "$file"
+
+          done < analysis/project/source/file_list.txt \
+            > analysis/project/source/all_source.txt
+
+      - name: Inspect SceneView Android module
+        run: |
+          set -e
+
+          mkdir -p analysis/sceneview/inspection
+
+          {
+            echo "SCENEVIEW ANDROID MODULE"
+            echo "======================="
+            echo
+
+            find analysis/sceneview/source \
+              -type f \
+              | sort
+
+          } > analysis/sceneview/inspection/tree.txt
+
+          {
+            echo "SCENEVIEW BUILD CONFIGURATION"
+            echo "============================="
+            echo
+
+            find analysis/sceneview/source \
+              -type f \
+              \( \
+                -name "build.gradle" -o \
+                -name "build.gradle.kts" -o \
+                -name "libs.versions.toml" -o \
+                -name "gradle.properties" \
+              \) \
+              -print
+
+            echo
+            echo "Relevant dependency references:"
+            echo
+
+            grep -R \
+              -n \
+              -E \
+              "filament|kotlin|compose|compileSdk|minSdk|targetSdk|sceneview" \
+              analysis/sceneview/source \
+              --include="*.gradle" \
+              --include="*.gradle.kts" \
+              --include="*.toml" \
+              --include="*.properties" \
+              2>/dev/null \
+              | head -n 3000 || true
+
+          } > analysis/sceneview/inspection/build_config.txt
+
+      - name: Find SceneView GLB loading implementation
+        run: |
+          set -e
+
+          {
+            echo "SCENEVIEW GLB / MODEL LOADING IMPLEMENTATION"
+            echo "============================================="
+            echo
+
+            grep -R \
+              -n \
+              -E \
+              "rememberModelInstance|ModelLoader|createModelInstance|loadModelGlb|loadModelGltf|ModelNode" \
+              analysis/sceneview/source \
+              --include="*.kt" \
+              --include="*.java" \
+              2>/dev/null \
+              | head -n 5000 || true
+
+          } > analysis/sceneview/inspection/glb_loading.txt
+
+          cat analysis/sceneview/inspection/glb_loading.txt
+
+      - name: Find SceneView rendering implementation
+        run: |
+          set -e
+
+          {
+            echo "SCENEVIEW RENDERING IMPLEMENTATION"
+            echo "================================="
+            echo
+
+            grep -R \
+              -n \
+              -E \
+              "class SceneView|fun SceneView|rememberEngine|Engine|Renderer|SwapChain|View|Scene|Camera|SurfaceView|TextureView|Choreographer" \
+              analysis/sceneview/source \
+              --include="*.kt" \
+              --include="*.java" \
+              2>/dev/null \
+              | head -n 10000 || true
+
+          } > analysis/sceneview/inspection/rendering.txt
+
+          cat analysis/sceneview/inspection/rendering.txt
+
+      - name: Find SceneView touch/camera controls
+        run: |
+          set -e
+
+          {
+            echo "SCENEVIEW CAMERA / TOUCH IMPLEMENTATION"
+            echo "======================================"
+            echo
+
+            grep -R \
+              -n \
+              -E \
+              "CameraManipulator|CameraNode|Manipulator|gesture|Gesture|touch|scaleToUnits|rotation|zoom|pan|orbit" \
+              analysis/sceneview/source \
+              --include="*.kt" \
+              --include="*.java" \
+              2>/dev/null \
+              | head -n 10000 || true
+
+          } > analysis/sceneview/inspection/camera_touch.txt
+
+      - name: Find working SceneView GLB samples
+        run: |
+          set -e
+
+          {
+            echo "SCENEVIEW GLB SAMPLES"
+            echo "===================="
+            echo
+
+            find analysis/sceneview/source/samples \
+              -type f \
+              \( \
+                -name "*.kt" -o \
+                -name "*.java" -o \
+                -name "*.xml" \
+              \) \
+              2>/dev/null \
+              | sort
+
+            echo
+            echo "Model references:"
+            echo
+
+            grep -R \
+              -n \
+              -E \
+              "\.glb|\.gltf|rememberModelInstance|ModelNode" \
+              analysis/sceneview/source/samples \
+              2>/dev/null \
+              | head -n 5000 || true
+
+          } > analysis/sceneview/inspection/samples.txt
+
+      - name: Inspect SceneView transitive dependencies
+        run: |
+          set -e
+
+          {
+            echo "SCENEVIEW POM"
+            echo "============="
+            echo
+
+            cat analysis/maven/sceneview-4.37.0.pom
+
+            echo
+            echo
+            echo "SCENEVIEW CORE POM"
+            echo "=================="
+            echo
+
+            cat analysis/maven/sceneview-core-4.37.0.pom
+
+          } > analysis/sceneview/inspection/dependencies.txt
+
+      - name: Analyze Filament conflict
+        run: |
+          set -e
+
+          {
+            echo "FILAMENT VERSION CONFLICT ANALYSIS"
+            echo "=================================="
+            echo
+
+            echo "Our project:"
+            grep -R \
+              -n \
+              "com.google.android.filament" \
+              app/build.gradle.kts \
+              || true
+
+            echo
+            echo "SceneView POM:"
+            grep -n \
+              -B 4 \
+              -A 8 \
+              "filament" \
+              analysis/maven/sceneview-4.37.0.pom \
+              || true
+
+            echo
+            echo "SceneView source build files:"
+            grep -R \
+              -n \
+              -E \
+              "filament.*version|filament-android|gltfio|filament-utils" \
+              analysis/sceneview/source \
+              --include="*.gradle" \
+              --include="*.gradle.kts" \
+              --include="*.toml" \
+              2>/dev/null \
+              | head -n 2000 || true
+
+          } > analysis/sceneview/inspection/filament_conflict.txt
+
+          cat analysis/sceneview/inspection/filament_conflict.txt
+
+      - name: Inspect SceneView AAR contents
+        run: |
+          set -e
+
+          mkdir -p analysis/sceneview/aar
+
+          for aar in analysis/maven/*.aar; do
+
+            name="$(basename "$aar" .aar)"
+
+            mkdir -p "analysis/sceneview/aar/$name"
+
+            unzip -q \
+              "$aar" \
+              -d "analysis/sceneview/aar/$name"
+
+            echo
+            echo "============================================================"
+            echo "$name"
+            echo "============================================================"
+
+            find "analysis/sceneview/aar/$name" \
+              -type f \
+              | sort
+
+          done > analysis/sceneview/inspection/aar_contents.txt
+
+      - name: Inspect SceneView native ABIs
+        run: |
+          set -e
+
+          {
+            echo "SCENEVIEW NATIVE ABI ANALYSIS"
+            echo "============================"
+            echo
+
+            for aar in analysis/maven/*.aar; do
+
+              echo
+              echo "===== $(basename "$aar") ====="
+
+              unzip -l "$aar" \
+                | grep -E \
+                  "jni/.+/(arm64-v8a|armeabi-v7a|x86|x86_64)/.+\.so" \
+                || true
+
+            done
+
+          } > analysis/sceneview/inspection/native_abis.txt
+
+          cat analysis/sceneview/inspection/native_abis.txt
+
+      - name: Analyze Compose requirement
+        run: |
+          set -e
+
+          {
+            echo "COMPOSE DEPENDENCY ANALYSIS"
+            echo "=========================="
+            echo
+
+            grep -R \
+              -n \
+              -E \
+              "androidx.compose|compose-bom|Compose|@Composable" \
+              analysis/maven \
+              analysis/sceneview/source \
+              --include="*.pom" \
+              --include="*.gradle" \
+              --include="*.gradle.kts" \
+              --include="*.toml" \
+              --include="*.kt" \
+              2>/dev/null \
+              | head -n 10000 || true
+
+          } > analysis/sceneview/inspection/compose.txt
+
+      - name: Check current project Gradle dependency graph
+        run: |
+          set -e
+
+          if [ -x "./gradlew" ]; then
+
+            echo "Gradle wrapper found."
+
+            ./gradlew \
+              :app:dependencies \
+              --configuration debugRuntimeClasspath \
+              > analysis/project/dependency_graph.txt \
+              2>&1 \
+              || true
+
+          else
+
+            echo "No Gradle wrapper found." \
+              > analysis/project/dependency_graph.txt
+
+          fi
+
+          cat analysis/project/dependency_graph.txt
+
+      - name: Test Maven availability without changing project
+        run: |
+          set -e
+
+          echo "Checking SceneView artifact metadata..."
+
+          curl -I \
+            --fail \
+            --silent \
+            --show-error \
+            https://repo1.maven.org/maven2/io/github/sceneview/sceneview/4.37.0/sceneview-4.37.0.aar \
+            > analysis/maven/sceneview_headers.txt
+
+          cat analysis/maven/sceneview_headers.txt
+
+      - name: Analyze Android SDK compatibility
+        run: |
+          set -e
+
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          files = [
+              Path("app/build.gradle.kts"),
+              Path("analysis/sceneview/source/gradle.properties"),
+          ]
+
+          output = []
+
+          output.append(
+              "ANDROID / KOTLIN COMPATIBILITY"
+          )
+          output.append(
+              "=============================="
+          )
+          output.append("")
+
+          for path in files:
+              if not path.exists():
+                  continue
+
+              text = path.read_text(
+                  encoding="utf-8",
+                  errors="replace"
+              )
+
+              output.append(
+                  f"FILE: {path}"
+              )
+
+              for pattern in [
+                  r"compileSdk\s*=\s*[^\n]+",
+                  r"targetSdk\s*=\s*[^\n]+",
+                  r"minSdk\s*=\s*[^\n]+",
+                  r"kotlin.*version[^\n]*",
+                  r"jvmToolchain[^\n]*"
+              ]:
+                  for match in re.finditer(
+                      pattern,
+                      text,
+                      re.IGNORECASE
+                  ):
+                      output.append(
+                          "  " + match.group(0).strip()
+                      )
+
+              output.append("")
+
+          Path(
+              "analysis/compatibility.txt"
+          ).write_text(
+              "\n".join(output),
+              encoding="utf-8"
+          )
+
+          print("\n".join(output))
+          PY
+
+      - name: Build compatibility matrix
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          output = """
+          PROJECT vs SCENEVIEW COMPATIBILITY MATRIX
+          =========================================
+
+          Component                  Our project        SceneView 4.37.0
+          ----------------------------------------------------------------
+          Android minSdk             26                 24
+          Android targetSdk         37                 36
+          Kotlin                    2.4.20             see exact source
+          Renderer                  Filament 1.76.1   Filament 1.72.1
+          GLB support               Yes                Yes
+          Compose                   Not currently     SceneView API uses Compose
+          Model loader              Custom/ModelViewer SceneView ModelLoader
+          Camera controls           Custom             Built in
+          Touch controls             Custom             Built in
+          Rendering lifecycle       Custom             SceneView managed
+          Native Filament           Direct dependency Transitive dependency
+          """
+
+          Path(
+              "analysis/compatibility_matrix.txt"
+          ).write_text(
+              output.strip() + "\n",
+              encoding="utf-8"
+          )
+
+          print(output)
+          PY
+
+      - name: Generate Word compatibility report
+        run: |
+          cat > analysis/generate_sceneview_report.py <<'PY'
+          from pathlib import Path
+          from docx import Document
+          from docx.shared import Pt
+          from docx.enum.text import WD_ALIGN_PARAGRAPH
+          from docx.enum.table import WD_TABLE_ALIGNMENT
+
+          OUT = Path(
+              "PIFuHDC_SceneView_Compatibility_Analysis.docx"
+          )
+
+          doc = Document()
+
+          doc.styles["Normal"].font.name = "Arial"
+          doc.styles["Normal"].font.size = Pt(10)
+
+          for name in [
+              "Title",
+              "Heading 1",
+              "Heading 2",
+              "Heading 3"
+          ]:
+              doc.styles[name].font.name = "Arial"
+
+          title = doc.add_heading(
+              "PIFuHDC 3D Viewer",
+              0
+          )
+
+          title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+          p = doc.add_paragraph()
+          p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+          r = p.add_run(
+              "SceneView 4.37.0 Compatibility & "
+              "GLB Viewer Analysis"
+          )
+
+          r.bold = True
+
+          p = doc.add_paragraph()
+          p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+          p.add_run(
+              "Bootstrap 6 • Read-only analysis • "
+              "No application source modifications"
+          )
+
+          doc.add_page_break()
+
+          def heading(text, level=1):
+              doc.add_heading(text, level)
+
+          def paragraph(text):
+              doc.add_paragraph(text)
+
+          def file_section(title, path, limit=40000):
+              heading(title, 2)
+
+              path = Path(path)
+
+              if not path.exists():
+                  paragraph(
+                      f"Not available: {path}"
+                  )
+                  return
+
+              text = path.read_text(
+                  encoding="utf-8",
+                  errors="replace"
+              )
+
+              if len(text) > limit:
+                  text = (
+                      text[:limit] +
+                      "\n\n[TRUNCATED]\n"
+                  )
+
+              p = doc.add_paragraph()
+              r = p.add_run(text)
+              r.font.name = "Courier New"
+              r.font.size = Pt(8)
+
+          heading("1. Purpose")
+
+          paragraph(
+              "This report determines whether SceneView 4.37.0 "
+              "can replace the custom GLB rendering layer in "
+              "PIFuHDC-3D-Viewer without changing the existing "
+              "project until compatibility has been established."
+          )
+
+          paragraph(
+              "The workflow performs inspection only. It does not "
+              "modify MainActivity.kt, DuckTestActivity.kt, "
+              "build.gradle.kts, the manifest, or any other "
+              "application source file."
+          )
+
+          heading("2. SceneView Version")
+
+          paragraph(
+              "The exact SceneView tag v4.37.0 is inspected."
+          )
+
+          paragraph(
+              "SceneView provides an Android 3D artifact:"
+          )
+
+          paragraph(
+              "io.github.sceneview:sceneview:4.37.0"
+          )
+
+          heading("3. Important Dependency Finding")
+
+          paragraph(
+              "SceneView 4.37.0 uses Filament transitively. "
+              "The published Maven metadata must be inspected "
+              "before adding SceneView because our application "
+              "currently declares Filament 1.76.1 directly."
+          )
+
+          paragraph(
+              "The report therefore treats the Filament version "
+              "difference as a compatibility issue to resolve, "
+              "rather than silently mixing two Filament versions."
+          )
+
+          heading("4. Current Project")
+
+          file_section(
+              "Current project configuration",
+              "analysis/project/current_project.txt",
+              50000
+          )
+
+          heading("5. Current Rendering Source")
+
+          file_section(
+              "Current Android source",
+              "analysis/project/source/all_source.txt",
+              70000
+          )
+
+          heading("6. SceneView Build Configuration")
+
+          file_section(
+              "SceneView build configuration",
+              "analysis/sceneview/inspection/build_config.txt",
+              40000
+          )
+
+          heading("7. SceneView GLB Loading")
+
+          file_section(
+              "GLB loading implementation references",
+              "analysis/sceneview/inspection/glb_loading.txt",
+              50000
+          )
+
+          heading("8. SceneView Rendering Pipeline")
+
+          file_section(
+              "Rendering implementation references",
+              "analysis/sceneview/inspection/rendering.txt",
+              60000
+          )
+
+          heading("9. Camera and Touch Controls")
+
+          file_section(
+              "Camera/touch implementation",
+              "analysis/sceneview/inspection/camera_touch.txt",
+              60000
+          )
+
+          heading("10. Working SceneView Samples")
+
+          file_section(
+              "SceneView samples",
+              "analysis/sceneview/inspection/samples.txt",
+              50000
+          )
+
+          heading("11. SceneView Dependencies")
+
+          file_section(
+              "Published Maven dependency metadata",
+              "analysis/sceneview/inspection/dependencies.txt",
+              50000
+          )
+
+          heading("12. Filament Conflict")
+
+          file_section(
+              "Filament version analysis",
+              "analysis/sceneview/inspection/filament_conflict.txt",
+              30000
+          )
+
+          heading("13. Native ABI Analysis")
+
+          file_section(
+              "SceneView native libraries",
+              "analysis/sceneview/inspection/native_abis.txt",
+              30000
+          )
+
+          heading("14. Compose Analysis")
+
+          file_section(
+              "Compose dependencies and source usage",
+              "analysis/sceneview/inspection/compose.txt",
+              30000
+          )
+
+          heading("15. Compatibility Matrix")
+
+          matrix = Path(
+              "analysis/compatibility_matrix.txt"
+          )
+
+          if matrix.exists():
+              p = doc.add_paragraph()
+              r = p.add_run(
+                  matrix.read_text(
+                      encoding="utf-8"
+                  )
+              )
+              r.font.name = "Courier New"
+              r.font.size = Pt(9)
+
+          heading("16. Android/Kotlin Compatibility")
+
+          file_section(
+              "Compatibility extraction",
+              "analysis/compatibility.txt",
+              20000
+          )
+
+          heading("17. Dependency Graph")
+
+          file_section(
+              "Current Gradle runtime dependency graph",
+              "analysis/project/dependency_graph.txt",
+              50000
+          )
+
+          heading("18. What SceneView Could Replace")
+
+          replacements = [
+              (
+                  "Custom ModelViewer setup",
+                  "Potentially replaced by SceneView's managed renderer."
+              ),
+              (
+                  "Manual render lifecycle",
+                  "Potentially handled by SceneView."
+              ),
+              (
+                  "Manual camera controls",
+                  "SceneView provides camera/gesture support."
+              ),
+              (
+                  "Manual GLB model loading",
+                  "SceneView provides ModelLoader/model-instance APIs."
+              ),
+              (
+                  "Manual Filament scene setup",
+                  "SceneView manages the rendering scene."
+              )
+          ]
+
+          table = doc.add_table(
+              rows=1,
+              cols=2
+          )
+
+          table.alignment = WD_TABLE_ALIGNMENT.CENTER
+
+          table.rows[0].cells[0].text = "Current responsibility"
+          table.rows[0].cells[1].text = "Potential SceneView replacement"
+
+          for left, right in replacements:
+              cells = table.add_row().cells
+              cells[0].text = left
+              cells[1].text = right
+
+          heading("19. What Must NOT Be Copied")
+
+          for item in [
+              "SceneView internal source files.",
+              "Filament native libraries manually.",
+              "SceneView .so files manually.",
+              "SceneView internal renderer classes.",
+              "ARCore components when only GLB viewing is required.",
+              "Random sample code from an older SceneView version.",
+              "APIs that are absent from the exact 4.37.0 artifact."
+          ]:
+              doc.add_paragraph(
+                  item,
+                  style="List Bullet"
+              )
+
+          heading("20. Required Decision Before Modification")
+
+          paragraph(
+              "The next implementation step must be selected only "
+              "after checking the Filament dependency graph and "
+              "Compose/API requirements. In particular, we must "
+              "decide whether to migrate the existing activity to "
+              "SceneView's Compose-based API or whether the current "
+              "project should use a compatible lower-level SceneView "
+              "component."
+          )
+
+          heading("21. Recommended Migration Boundary")
+
+          paragraph(
+              "If SceneView is adopted, the safest boundary is "
+              "the GLB display layer only. The eventual PIFuHDC "
+              "reconstruction pipeline should remain independent."
+          )
+
+          paragraph(
+              "The intended architecture is:"
+          )
+
+          paragraph(
+              "PIFuHDC reconstruction → GLB → SceneView ModelLoader "
+              "→ ModelNode → Filament → Android display"
+          )
+
+          heading("22. Critical Compatibility Questions")
+
+          questions = [
+              "Does SceneView's Filament version conflict with our direct Filament dependencies?",
+              "Does SceneView require Compose dependencies that our current project does not have?",
+              "Can the current activity architecture host SceneView cleanly?",
+              "Can the existing file picker continue to provide GLB content?",
+              "Can SceneView load GLB data from a URI or byte stream?",
+              "What is the smallest safe dependency change?",
+              "Which current Filament dependencies become redundant?",
+              "Which ABI/native libraries are supplied transitively?",
+              "Can the existing target SDK 37 remain unchanged?",
+              "Can the existing minSdk 26 remain unchanged?"
+          ]
+
+          for q in questions:
+              doc.add_paragraph(
+                  q,
+                  style="List Number"
+              )
+
+          heading("23. Conclusion")
+
+          paragraph(
+              "SceneView is a strong candidate for replacing the "
+              "custom GLB renderer because it already packages "
+              "Filament rendering, model loading, scene management "
+              "and camera interaction. However, the current project "
+              "uses Filament 1.76.1 while SceneView 4.37.0's published "
+              "metadata identifies Filament 1.72.1. Therefore the "
+              "dependency graph must be resolved before any code "
+              "replacement is attempted."
+          )
+
+          paragraph(
+              "No application files were modified by Bootstrap 6."
+          )
+
+          heading("24. Generated Analysis Files")
+
+          analysis_root = Path("analysis")
+
+          if analysis_root.exists():
+              for path in sorted(
+                  analysis_root.rglob("*")
+              ):
+                  if path.is_file():
+                      doc.add_paragraph(
+                          str(path)
+                      )
+
+          doc.save(OUT)
+
+          print(
+              f"Created {OUT}"
+          )
+          PY
+
+          python analysis/generate_sceneview_report.py
+
+      - name: Upload Bootstrap 6 report
+        uses: actions/upload-artifact@v4
+        with:
+          name: PIFuHDC-SceneView-Compatibility-Analysis
+          path: |
+            PIFuHDC_SceneView_Compatibility_Analysis.docx
+            analysis/
+          if-no-files-found: error
