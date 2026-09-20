@@ -30,35 +30,26 @@ jobs:
 
 
       # ============================================================
-      # 3. ANDROID SDK COMMAND LINE TOOLS
-      # ============================================================
-      #
-      # This replaces all manual sdkmanager detection.
-      #
-      # setup-android installs the current command line tools,
-      # accepts Android licenses and exposes sdkmanager on PATH.
-      #
+      # 3. ANDROID SDK
       # ============================================================
       - name: Setup Android SDK
         uses: android-actions/setup-android@v4
-        with:
-          packages: ""
 
 
       # ============================================================
-      # 4. INSTALL ANDROID SDK COMPONENTS
+      # 4. INSTALL ANDROID API 37
       # ============================================================
-      - name: Install Android SDK 37
+      - name: Install Android SDK components
         shell: bash
         run: |
           set -e
 
           echo "=========================================="
-          echo "ANDROID SDK INFORMATION"
+          echo "ANDROID SDK"
           echo "=========================================="
 
-          echo "ANDROID_HOME=${ANDROID_HOME:-}"
-          echo "ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT:-}"
+          echo "ANDROID_HOME=${ANDROID_HOME}"
+          echo "ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT}"
 
           echo ""
           echo "sdkmanager:"
@@ -67,90 +58,61 @@ jobs:
           sdkmanager --version
 
           echo ""
-          echo "=========================================="
-          echo "AVAILABLE API 37 PACKAGES"
-          echo "=========================================="
-
-          sdkmanager --list \
-            | grep -E "platforms;android-37|build-tools;36" \
-            | head -30 || true
-
-          echo ""
-          echo "=========================================="
-          echo "INSTALLING REQUIRED PACKAGES"
-          echo "=========================================="
+          echo "Installing SDK packages..."
 
           sdkmanager \
             "platform-tools" \
-            "platforms;android-37.0" \
+            "platforms;android-37" \
             "build-tools;36.0.0"
 
           echo ""
-          echo "=========================================="
-          echo "VERIFYING SDK"
-          echo "=========================================="
-
           echo "Installed platforms:"
-          ls -la "$ANDROID_HOME/platforms" || true
+          ls -la "${ANDROID_HOME}/platforms"
 
           echo ""
           echo "Installed build tools:"
-          ls -la "$ANDROID_HOME/build-tools" || true
+          ls -la "${ANDROID_HOME}/build-tools"
 
           echo ""
           echo "Checking Android API 37..."
 
-          if [ -d "$ANDROID_HOME/platforms/android-37" ]; then
-            echo "SUCCESS: platforms/android-37 exists."
-          elif [ -d "$ANDROID_HOME/platforms/android-37.0" ]; then
-            echo "SUCCESS: platforms/android-37.0 exists."
+          if [ -d "${ANDROID_HOME}/platforms/android-37" ]; then
+            echo "SUCCESS: Android API 37 installed."
           else
             echo ""
-            echo "ERROR: Android API 37 platform was not installed."
-
+            echo "ERROR: Android API 37 was not installed."
             echo ""
             echo "Available platforms:"
-            find "$ANDROID_HOME/platforms" \
+            find "${ANDROID_HOME}/platforms" \
               -maxdepth 1 \
               -mindepth 1 \
               -type d \
-              -print \
-              2>/dev/null || true
-
+              -print || true
             exit 1
           fi
 
-          echo ""
-          echo "SUCCESS: Android SDK API 37 is ready."
-
 
       # ============================================================
-      # 5. GRADLE 9.5
+      # 5. CHECK PREINSTALLED GRADLE
       # ============================================================
-      - name: Setup Gradle 9.5
+      - name: Check Gradle
         shell: bash
         run: |
           set -e
 
-          wget -q \
-            https://services.gradle.org/distributions/gradle-9.5-bin.zip \
-            -O /tmp/gradle-9.5-bin.zip
-
-          rm -rf /opt/gradle-9.5
-
-          unzip -q \
-            /tmp/gradle-9.5-bin.zip \
-            -d /opt
-
-          echo "/opt/gradle-9.5/bin" >> "$GITHUB_PATH"
-
-          export PATH="/opt/gradle-9.5/bin:$PATH"
-
-          echo ""
           echo "=========================================="
           echo "GRADLE"
           echo "=========================================="
 
+          if ! command -v gradle >/dev/null 2>&1; then
+            echo "ERROR: Gradle is not available on this runner."
+            exit 1
+          fi
+
+          echo "Gradle executable:"
+          command -v gradle
+
+          echo ""
           gradle --version
 
 
@@ -185,22 +147,30 @@ jobs:
 
           BASE_URL="https://github.com/google/filament/releases/download/v${FILAMENT_VERSION}"
 
-          echo "Downloading Filament ${FILAMENT_VERSION}..."
+          echo "=========================================="
+          echo "FILAMENT ${FILAMENT_VERSION}"
+          echo "=========================================="
+
+          echo "Downloading filament..."
 
           wget -q \
             "${BASE_URL}/filament-v${FILAMENT_VERSION}-android.aar" \
             -O app/libs/filament.aar
 
+          echo "Downloading gltfio..."
+
           wget -q \
             "${BASE_URL}/gltfio-v${FILAMENT_VERSION}-android.aar" \
             -O app/libs/gltfio.aar
+
+          echo "Downloading filament-utils..."
 
           wget -q \
             "${BASE_URL}/filament-utils-v${FILAMENT_VERSION}-android.aar" \
             -O app/libs/filament-utils.aar
 
           echo ""
-          echo "Downloaded Filament files:"
+          echo "Downloaded files:"
 
           ls -lh app/libs/
 
@@ -213,7 +183,7 @@ jobs:
 
 
       # ============================================================
-      # 8. settings.gradle.kts
+      # 8. SETTINGS
       # ============================================================
       - name: Write settings.gradle.kts
         shell: bash
@@ -274,7 +244,7 @@ jobs:
 
 
       # ============================================================
-      # 11. APP BUILD FILE
+      # 11. APP BUILD
       # ============================================================
       - name: Write app/build.gradle.kts
         shell: bash
@@ -286,15 +256,12 @@ jobs:
           }
 
           android {
-
               namespace = "com.pifuhdc.viewer"
 
               compileSdk = 37
 
               defaultConfig {
-
-                  applicationId =
-                      "com.pifuhdc.viewer"
+                  applicationId = "com.pifuhdc.viewer"
 
                   minSdk = 26
 
@@ -306,9 +273,7 @@ jobs:
               }
 
               buildTypes {
-
                   release {
-
                       isMinifyEnabled = false
 
                       proguardFiles(
@@ -321,51 +286,38 @@ jobs:
               }
 
               compileOptions {
-
-                  sourceCompatibility =
-                      JavaVersion.VERSION_17
-
-                  targetCompatibility =
-                      JavaVersion.VERSION_17
+                  sourceCompatibility = JavaVersion.VERSION_17
+                  targetCompatibility = JavaVersion.VERSION_17
               }
 
               kotlinOptions {
-
                   jvmTarget = "17"
               }
 
               packaging {
-
                   resources.excludes +=
                       "/META-INF/{AL2.0,LGPL2.1}"
               }
           }
 
           dependencies {
-
               implementation(
-                  files(
-                      "libs/filament.aar"
-                  )
+                  files("libs/filament.aar")
               )
 
               implementation(
-                  files(
-                      "libs/gltfio.aar"
-                  )
+                  files("libs/gltfio.aar")
               )
 
               implementation(
-                  files(
-                      "libs/filament-utils.aar"
-                  )
+                  files("libs/filament-utils.aar")
               )
           }
           EOF
 
 
       # ============================================================
-      # 12. ANDROID MANIFEST
+      # 12. MANIFEST
       # ============================================================
       - name: Write AndroidManifest.xml
         shell: bash
@@ -910,7 +862,12 @@ jobs:
 
           chmod +x gradlew
 
-          echo "Gradle wrapper generated."
+          echo ""
+          echo "=========================================="
+          echo "GRADLE WRAPPER"
+          echo "=========================================="
+
+          ./gradlew --version
 
 
       # ============================================================
@@ -922,39 +879,55 @@ jobs:
           set -e
 
           echo "=========================================="
-          echo "PROJECT TREE"
+          echo "PROJECT"
           echo "=========================================="
-
-          find . \
-            -maxdepth 6 \
-            -type f \
-            -not -path "./.git/*" \
-            | sort
 
           echo ""
-          echo "=========================================="
-          echo "FILAMENT FILES"
-          echo "=========================================="
+          echo "Gradle:"
+          ./gradlew --version
 
+          echo ""
+          echo "Android SDK:"
+          ls -ld "${ANDROID_HOME}/platforms/android-37"
+
+          echo ""
+          echo "Filament:"
           ls -lh app/libs/
 
           echo ""
-          echo "=========================================="
-          echo "ANDROID SDK"
-          echo "=========================================="
+          echo "MainActivity:"
+          test -f \
+            app/src/main/java/com/pifuhdc/viewer/MainActivity.kt
 
-          sdkmanager --list \
-            | grep -E "platforms;android-37|build-tools;36" \
-            | head -20 || true
+          echo ""
+          echo "Project verification successful."
 
 
       # ============================================================
-      # 20. BUILD DEBUG APK
+      # 20. CLEAN
+      # ============================================================
+      - name: Clean Gradle project
+        shell: bash
+        run: |
+          set -e
+
+          ./gradlew \
+            clean \
+            --stacktrace \
+            --no-daemon
+
+
+      # ============================================================
+      # 21. BUILD DEBUG APK
       # ============================================================
       - name: Build Debug APK
         shell: bash
         run: |
           set -e
+
+          echo "=========================================="
+          echo "BUILDING PIFuHDC 3D VIEWER"
+          echo "=========================================="
 
           ./gradlew \
             :app:assembleDebug \
@@ -963,7 +936,7 @@ jobs:
 
 
       # ============================================================
-      # 21. VERIFY APK
+      # 22. VERIFY APK
       # ============================================================
       - name: Verify APK
         shell: bash
@@ -986,7 +959,7 @@ jobs:
 
 
       # ============================================================
-      # 22. UPLOAD APK
+      # 23. UPLOAD APK
       # ============================================================
       - name: Upload Debug APK
         uses: actions/upload-artifact@v4
@@ -997,9 +970,9 @@ jobs:
 
 
       # ============================================================
-      # 23. COMMIT GENERATED PROJECT
+      # 24. COMMIT PROJECT
       # ============================================================
-      - name: Commit Bootstrap 2 project
+      - name: Commit generated project
         shell: bash
         run: |
           set -e
