@@ -75,6 +75,7 @@ class DuckTestActivity : Activity() {
 
         val openButton = Button(this).apply {
             text = "OPEN GLB"
+
             setOnClickListener {
                 openGlb()
             }
@@ -112,21 +113,19 @@ class DuckTestActivity : Activity() {
         try {
             modelViewer = ModelViewer(textureView)
 
-            textureView.setOnTouchListener(
-                modelViewer!!.getTouchListener()
-            )
-
             statusText.text = "Renderer ready • Open Duck.glb"
 
             startRendering()
 
         } catch (e: Exception) {
-            statusText.text = "Renderer error: ${e.message}"
+            statusText.text =
+                "Renderer error: ${e.message}"
         }
     }
 
     private fun openGlb() {
         val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+
             addCategory(Intent.CATEGORY_OPENABLE)
 
             type = "model/gltf-binary"
@@ -141,7 +140,10 @@ class DuckTestActivity : Activity() {
             )
         }
 
-        startActivityForResult(intent, REQUEST_GLB)
+        startActivityForResult(
+            intent,
+            REQUEST_GLB
+        )
     }
 
     @Deprecated("Deprecated Android API retained for compatibility")
@@ -174,10 +176,14 @@ class DuckTestActivity : Activity() {
                 ?.use { input ->
                     input.readBytes()
                 }
-                ?: throw Exception("Unable to read selected file")
+                ?: throw Exception(
+                    "Unable to read selected file"
+                )
 
             if (bytes.size < 12) {
-                throw Exception("File is too small to be a GLB")
+                throw Exception(
+                    "File is too small to be a GLB"
+                )
             }
 
             val buffer = ByteBuffer
@@ -189,7 +195,9 @@ class DuckTestActivity : Activity() {
             val declaredLength = buffer.int
 
             if (magic != 0x46546C67) {
-                throw Exception("Not a GLB file")
+                throw Exception(
+                    "Not a GLB file"
+                )
             }
 
             if (version != 2) {
@@ -200,28 +208,34 @@ class DuckTestActivity : Activity() {
 
             if (declaredLength > bytes.size) {
                 throw Exception(
-                    "Invalid GLB length: $declaredLength / ${bytes.size}"
+                    "Invalid GLB length: " +
+                        "$declaredLength / ${bytes.size}"
                 )
             }
 
             buffer.position(0)
 
             val viewer = modelViewer
-                ?: throw Exception("ModelViewer not initialized")
+                ?: throw Exception(
+                    "ModelViewer not initialized"
+                )
 
             viewer.loadModelGlb(buffer)
 
             viewer.transformToUnitCube()
 
-            statusText.text = "GLB loaded • rendering"
+            statusText.text =
+                "GLB loaded • rendering"
 
         } catch (e: Exception) {
+
             statusText.text =
                 "GLB error: ${e.message}"
         }
     }
 
     private fun startRendering() {
+
         if (rendering) {
             return
         }
@@ -236,15 +250,22 @@ class DuckTestActivity : Activity() {
     private val frameCallback =
         object : Choreographer.FrameCallback {
 
-            override fun doFrame(frameTimeNanos: Long) {
+            override fun doFrame(
+                frameTimeNanos: Long
+            ) {
 
                 if (!rendering) {
                     return
                 }
 
                 try {
-                    modelViewer?.render(frameTimeNanos)
+
+                    modelViewer?.render(
+                        frameTimeNanos
+                    )
+
                 } catch (e: Exception) {
+
                     statusText.text =
                         "Render error: ${e.message}"
                 }
@@ -264,21 +285,27 @@ class DuckTestActivity : Activity() {
     }
 
     override fun onPause() {
+
         rendering = false
 
         Choreographer
             .getInstance()
-            .removeFrameCallback(frameCallback)
+            .removeFrameCallback(
+                frameCallback
+            )
 
         super.onPause()
     }
 
     override fun onDestroy() {
+
         rendering = false
 
         Choreographer
             .getInstance()
-            .removeFrameCallback(frameCallback)
+            .removeFrameCallback(
+                frameCallback
+            )
 
         modelViewer?.destroy()
         modelViewer = null
