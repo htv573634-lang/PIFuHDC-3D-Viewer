@@ -5,16 +5,15 @@ plugins {
 android {
     namespace = "com.pifuhdc.viewer"
 
-    compileSdk = 35
+    compileSdk = 37
+    compileSdkMinor = 0
 
     defaultConfig {
         applicationId = "com.pifuhdc.viewer"
-
         minSdk = 26
-        targetSdk = 35
-
-        versionCode = 1
-        versionName = "0.1.0"
+        targetSdk = 37
+        versionCode = 3
+        versionName = "0.3.0"
     }
 
     buildTypes {
@@ -49,11 +48,7 @@ android {
 }
 
 kotlin {
-    compilerOptions {
-        jvmTarget.set(
-            org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
-        )
-    }
+    jvmToolchain(17)
 }
 
 dependencies {
