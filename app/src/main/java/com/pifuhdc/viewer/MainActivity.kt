@@ -22,7 +22,6 @@ import com.google.android.filament.utils.Utils
 
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
-import kotlin.math.max
 
 class MainActivity : Activity() {
 
@@ -36,14 +35,13 @@ class MainActivity : Activity() {
     private lateinit var statusText: TextView
 
     private var renderingStarted = false
-    private var modelLoaded = false
 
     private val choreographer =
         Choreographer.getInstance()
 
     /*
      * ------------------------------------------------
-     * FRAME CALLBACK
+     * FRAME LOOP
      * ------------------------------------------------
      */
 
@@ -57,9 +55,11 @@ class MainActivity : Activity() {
                 if (::modelViewer.isInitialized) {
 
                     try {
+
                         modelViewer.render(
                             frameTimeNanos
                         )
+
                     } catch (e: Exception) {
 
                         Log.e(
@@ -81,7 +81,7 @@ class MainActivity : Activity() {
 
     /*
      * ------------------------------------------------
-     * CREATE ACTIVITY
+     * CREATE
      * ------------------------------------------------
      */
 
@@ -166,7 +166,7 @@ class MainActivity : Activity() {
             TextView(this).apply {
 
                 text =
-                    "Initializing..."
+                    "Initializing 3D viewer..."
 
                 gravity =
                     Gravity.CENTER
@@ -225,11 +225,6 @@ class MainActivity : Activity() {
 
         setContentView(root)
 
-        /*
-         * ModelViewer must be created after
-         * TextureView has been attached.
-         */
-
         textureView.post {
 
             initializeViewer()
@@ -238,7 +233,7 @@ class MainActivity : Activity() {
 
     /*
      * ------------------------------------------------
-     * FILAMENT VIEWER
+     * INITIALIZE FILAMENT
      * ------------------------------------------------
      */
 
@@ -251,12 +246,6 @@ class MainActivity : Activity() {
                     textureView
                 )
 
-            /*
-             * Touch controls:
-             *
-             * drag  = rotate
-             * pinch = zoom
-             */
             textureView.setOnTouchListener(
                 modelViewer
             )
@@ -288,7 +277,7 @@ class MainActivity : Activity() {
 
             Toast.makeText(
                 this,
-                "Filament: ${e.message}",
+                "Filament error: ${e.message}",
                 Toast.LENGTH_LONG
             ).show()
         }
@@ -296,7 +285,7 @@ class MainActivity : Activity() {
 
     /*
      * ------------------------------------------------
-     * ENVIRONMENT
+     * LIGHTING / SKYBOX
      * ------------------------------------------------
      */
 
@@ -306,7 +295,7 @@ class MainActivity : Activity() {
             modelViewer.engine
 
         /*
-         * Neutral indirect light.
+         * Indirect light.
          */
 
         try {
@@ -341,22 +330,20 @@ class MainActivity : Activity() {
 
             Log.d(
                 TAG,
-                "IndirectLight installed"
+                "Indirect light installed"
             )
 
         } catch (e: Exception) {
 
             Log.e(
                 TAG,
-                "IndirectLight failed",
+                "Indirect light failed",
                 e
             )
         }
 
         /*
-         * Dark gray background.
-         * This makes a white/light Duck
-         * easy to see.
+         * Dark background.
          */
 
         try {
@@ -364,9 +351,9 @@ class MainActivity : Activity() {
             val skybox =
                 Skybox.Builder()
                     .color(
-                        0.06f,
-                        0.06f,
-                        0.06f,
+                        0.05f,
+                        0.05f,
+                        0.05f,
                         1.0f
                     )
                     .build(
@@ -391,7 +378,7 @@ class MainActivity : Activity() {
         }
 
         /*
-         * FXAA.
+         * Anti-aliasing.
          */
 
         try {
@@ -403,7 +390,7 @@ class MainActivity : Activity() {
 
             Log.w(
                 TAG,
-                "Could not enable FXAA",
+                "FXAA unavailable",
                 e
             )
         }
@@ -433,7 +420,7 @@ class MainActivity : Activity() {
 
         Log.d(
             TAG,
-            "Render loop STARTED"
+            "Render loop started"
         )
     }
 
@@ -447,7 +434,7 @@ class MainActivity : Activity() {
 
         Log.d(
             TAG,
-            "Render loop STOPPED"
+            "Render loop stopped"
         )
     }
 
@@ -459,7 +446,7 @@ class MainActivity : Activity() {
 
     private fun openGlbPicker() {
 
-        val intent =
+        val pickerIntent =
             Intent(
                 Intent.ACTION_OPEN_DOCUMENT
             ).apply {
@@ -483,7 +470,7 @@ class MainActivity : Activity() {
 
         @Suppress("DEPRECATION")
         startActivityForResult(
-            intent,
+            pickerIntent,
             REQUEST_GLB
         )
     }
@@ -495,7 +482,7 @@ class MainActivity : Activity() {
      */
 
     @Deprecated(
-        "Using Activity Result API later"
+        "Activity Result API can be used later"
     )
     override fun onActivityResult(
         requestCode: Int,
@@ -516,16 +503,16 @@ class MainActivity : Activity() {
                 RESULT_OK
         ) {
 
-            data?.data?.let {
+            data?.data?.let { uri ->
 
-                loadGlb(it)
+                loadGlb(uri)
             }
         }
     }
 
     /*
      * ------------------------------------------------
-     * OPEN-WITH SUPPORT
+     * OPEN WITH
      * ------------------------------------------------
      */
 
@@ -600,16 +587,10 @@ class MainActivity : Activity() {
             return
         }
 
-        modelLoaded = false
-
         try {
 
             statusText.text =
                 "Reading GLB..."
-
-            /*
-             * Read file.
-             */
 
             val bytes =
                 contentResolver
@@ -618,24 +599,22 @@ class MainActivity : Activity() {
                         it.readBytes()
                     }
                     ?: throw IllegalStateException(
-                        "Cannot read file"
+                        "Unable to read GLB"
                     )
 
             Log.d(
                 TAG,
-                "GLB bytes = ${bytes.size}"
+                "GLB size = ${bytes.size} bytes"
             )
 
             /*
-             * ------------------------------------------------
-             * HEADER
-             * ------------------------------------------------
+             * GLB header.
              */
 
             if (bytes.size < 12) {
 
                 throw IllegalArgumentException(
-                    "File is smaller than 12 bytes"
+                    "GLB is smaller than 12 bytes"
                 )
             }
 
@@ -655,9 +634,13 @@ class MainActivity : Activity() {
             if (magic != "glTF") {
 
                 throw IllegalArgumentException(
-                    "Invalid GLB magic: $magic"
+                    "Invalid GLB magic"
                 )
             }
+
+            /*
+             * GLB uses little endian.
+             */
 
             val header =
                 ByteBuffer
@@ -695,58 +678,43 @@ class MainActivity : Activity() {
             ) {
 
                 throw IllegalArgumentException(
-                    "Invalid GLB declared length"
+                    "Invalid GLB length"
                 )
             }
 
             /*
              * ------------------------------------------------
-             * LOAD
+             * LOAD INTO FILAMENT
              * ------------------------------------------------
              */
 
             statusText.text =
-                "Parsing GLB..."
+                "Loading GLB..."
 
-            val buffer =
+            val glbBuffer =
                 ByteBuffer
                     .wrap(bytes)
                     .order(
                         ByteOrder.LITTLE_ENDIAN
                     )
 
-            /*
-             * ModelViewer internally:
-             *
-             * 1. creates FilamentAsset
-             * 2. begins ResourceLoader
-             * 3. asyncUpdateLoad() runs every frame
-             * 4. ready renderables are added
-             *
-             * This is how the official implementation works.
-             */
-
             modelViewer.loadModelGlb(
-                buffer
-            )
-
-            /*
-             * DO NOT immediately declare it rendered.
-             */
-
-            statusText.text =
-                "GLB parsed - waiting for resources..."
-
-            Log.d(
-                TAG,
-                "loadModelGlb() returned"
+                glbBuffer
             )
 
             startRendering()
 
+            statusText.text =
+                "GLB accepted - loading resources..."
+
+            Log.d(
+                TAG,
+                "loadModelGlb() completed"
+            )
+
             /*
-             * Give Filament several frames to populate
-             * the scene before collecting diagnostics.
+             * Wait for Filament's asynchronous resource
+             * loading to progress.
              */
 
             textureView.postDelayed(
@@ -755,19 +723,19 @@ class MainActivity : Activity() {
                     inspectModel()
 
                 },
-                1000L
+                1500L
             )
 
         } catch (e: Exception) {
 
             Log.e(
                 TAG,
-                "GLB LOAD FAILED",
+                "GLB loading failed",
                 e
             )
 
             statusText.text =
-                "Load failed"
+                "GLB load failed"
 
             Toast.makeText(
                 this,
@@ -779,7 +747,7 @@ class MainActivity : Activity() {
 
     /*
      * ------------------------------------------------
-     * DIAGNOSTIC INSPECTION
+     * MODEL DIAGNOSTICS
      * ------------------------------------------------
      */
 
@@ -802,23 +770,16 @@ class MainActivity : Activity() {
             )
 
             statusText.text =
-                "ERROR: Asset = NULL"
+                "Asset NULL"
 
             return
         }
 
         /*
-         * Entity count.
-         */
-
-        val entityCount =
-            asset.entityCount
-
-        /*
-         * Renderable entities.
+         * FilamentAsset does not expose entityCount
+         * in this version.
          *
-         * FilamentAsset exposes these entities
-         * from the glTF asset.
+         * Use renderableEntities instead.
          */
 
         val renderableEntities =
@@ -827,85 +788,39 @@ class MainActivity : Activity() {
         val renderableCount =
             renderableEntities.size
 
-        /*
-         * Scene count.
-         */
-
         val sceneRenderableCount =
             modelViewer.scene.renderableCount
 
-        /*
-         * Bounding box.
-         */
-
-        val bounds =
-            asset.boundingBox
-
-        val centerX =
-            bounds.center[0]
-
-        val centerY =
-            bounds.center[1]
-
-        val centerZ =
-            bounds.center[2]
-
-        val halfX =
-            bounds.halfExtent[0]
-
-        val halfY =
-            bounds.halfExtent[1]
-
-        val halfZ =
-            bounds.halfExtent[2]
-
-        val width =
-            halfX * 2.0f
-
-        val height =
-            halfY * 2.0f
-
-        val depth =
-            halfZ * 2.0f
-
         Log.d(
             TAG,
-            "========== GLB DIAGNOSTIC =========="
+            "================================"
         )
 
         Log.d(
             TAG,
-            "Entity count = $entityCount"
+            "GLB DIAGNOSTIC"
         )
 
         Log.d(
             TAG,
-            "Renderable entity count = $renderableCount"
+            "Renderable entities = $renderableCount"
         )
 
         Log.d(
             TAG,
-            "Scene renderable count = $sceneRenderableCount"
+            "Scene renderables = $sceneRenderableCount"
         )
 
         Log.d(
             TAG,
-            "BoundingBox center = ($centerX, $centerY, $centerZ)"
+            "TextureView size = " +
+                "${textureView.width} x " +
+                "${textureView.height}"
         )
 
         Log.d(
             TAG,
-            "BoundingBox size = ($width, $height, $depth)"
-        )
-
-        Log.d(
-            TAG,
-            "Viewport = ${textureView.width} x ${textureView.height}"
-        )
-
-        Log.d(
-            TAG,
-            "===================================="
+            "================================"
         )
 
         /*
@@ -914,76 +829,38 @@ class MainActivity : Activity() {
          * ------------------------------------------------
          */
 
-        if (renderableCount > 0) {
+        val renderableManager =
+            modelViewer.engine
+                .renderableManager
 
-            val engine =
-                modelViewer.engine
+        for (
+            entity in renderableEntities
+        ) {
 
-            val renderableManager =
-                engine.renderableManager
+            try {
 
-            for (
-                entity in renderableEntities
-            ) {
+                val instance =
+                    renderableManager
+                        .getInstance(entity)
 
-                try {
+                val primitiveCount =
+                    renderableManager
+                        .getPrimitiveCount(
+                            instance
+                        )
 
-                    val instance =
-                        renderableManager
-                            .getInstance(entity)
+                Log.d(
+                    TAG,
+                    "Entity=$entity primitives=$primitiveCount"
+                )
 
-                    val primitiveCount =
-                        renderableManager
-                            .getPrimitiveCount(
-                                instance
-                            )
+            } catch (e: Exception) {
 
-                    Log.d(
-                        TAG,
-                        "Renderable entity=$entity primitives=$primitiveCount"
-                    )
-
-                    /*
-                     * Print material information.
-                     */
-
-                    for (
-                        primitive in
-                        0 until primitiveCount
-                    ) {
-
-                        try {
-
-                            val material =
-                                renderableManager
-                                    .getMaterialInstanceAt(
-                                        instance,
-                                        primitive
-                                    )
-
-                            Log.d(
-                                TAG,
-                                "  primitive=$primitive material=$material"
-                            )
-
-                        } catch (e: Exception) {
-
-                            Log.w(
-                                TAG,
-                                "  Material inspection failed",
-                                e
-                            )
-                        }
-                    }
-
-                } catch (e: Exception) {
-
-                    Log.e(
-                        TAG,
-                        "Renderable inspection failed",
-                        e
-                    )
-                }
+                Log.e(
+                    TAG,
+                    "Renderable inspection failed",
+                    e
+                )
             }
         }
 
@@ -998,8 +875,17 @@ class MainActivity : Activity() {
             val camera =
                 modelViewer.camera
 
+            /*
+             * Filament Camera.getPosition()
+             * requires an output array.
+             */
+
             val position =
-                camera.getPosition()
+                FloatArray(3)
+
+            camera.getPosition(
+                position
+            )
 
             Log.d(
                 TAG,
@@ -1009,13 +895,20 @@ class MainActivity : Activity() {
                     "${position[2]})"
             )
 
+            /*
+             * Projection matrix.
+             */
+
             val projection =
-                camera.getProjectionMatrix()
+                DoubleArray(16)
+
+            camera.getProjectionMatrix(
+                projection
+            )
 
             Log.d(
                 TAG,
-                "Camera projection matrix available = " +
-                    (projection.size >= 16)
+                "Camera projection matrix read"
             )
 
         } catch (e: Exception) {
@@ -1029,7 +922,7 @@ class MainActivity : Activity() {
 
         /*
          * ------------------------------------------------
-         * FORCE MODEL INTO VIEW
+         * MODEL TRANSFORM
          * ------------------------------------------------
          */
 
@@ -1039,7 +932,7 @@ class MainActivity : Activity() {
 
             Log.d(
                 TAG,
-                "transformToUnitCube() applied"
+                "transformToUnitCube applied"
             )
 
         } catch (e: Exception) {
@@ -1053,7 +946,7 @@ class MainActivity : Activity() {
 
         /*
          * ------------------------------------------------
-         * RESULT
+         * FINAL DIAGNOSTIC RESULT
          * ------------------------------------------------
          */
 
@@ -1063,13 +956,11 @@ class MainActivity : Activity() {
         ) {
 
             statusText.text =
-                "VISIBLE DATA • Entities $entityCount • Renderables $renderableCount"
-
-            modelLoaded = true
+                "RENDERABLES $renderableCount • SCENE $sceneRenderableCount"
 
             Log.d(
                 TAG,
-                "RESULT: Filament has renderables in scene"
+                "RESULT = RENDERABLE MODEL IN SCENE"
             )
 
         } else if (
@@ -1077,21 +968,21 @@ class MainActivity : Activity() {
         ) {
 
             statusText.text =
-                "RENDERABLES FOUND • Scene $sceneRenderableCount"
+                "ASSET $renderableCount • SCENE 0"
 
             Log.e(
                 TAG,
-                "RESULT: Asset has renderables but scene has none"
+                "RESULT = ASSET HAS RENDERABLES BUT SCENE IS EMPTY"
             )
 
         } else {
 
             statusText.text =
-                "NO RENDERABLES • Entities $entityCount"
+                "NO RENDERABLES"
 
             Log.e(
                 TAG,
-                "RESULT: Asset contains NO renderable entities"
+                "RESULT = NO RENDERABLE ENTITIES"
             )
         }
 
