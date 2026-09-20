@@ -53,14 +53,6 @@ kotlin {
 
 dependencies {
     implementation(
-        "com.google.android.filament:filament-android:1.76.1"
-    )
-
-    implementation(
-        "com.google.android.filament:gltfio-android:1.76.1"
-    )
-
-    implementation(
-        "com.google.android.filament:filament-utils-android:1.76.1"
+        "io.github.sceneview:sceneview:4.37.0"
     )
 }
