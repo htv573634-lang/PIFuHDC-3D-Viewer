@@ -14,8 +14,8 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 
-import com.google.android.filament.IndirectLight
-import com.google.android.filament.Skybox
+import com.google.android.filament.EntityManager
+import com.google.android.filament.LightManager
 import com.google.android.filament.View
 import com.google.android.filament.utils.ModelViewer
 import com.google.android.filament.utils.Utils
@@ -36,14 +36,10 @@ class MainActivity : Activity() {
 
     private var renderingStarted = false
 
+    private var lightEntity = 0
+
     private val choreographer =
         Choreographer.getInstance()
-
-    /*
-     * ------------------------------------------------
-     * FRAME LOOP
-     * ------------------------------------------------
-     */
 
     private val frameCallback =
         object : Choreographer.FrameCallback {
@@ -53,15 +49,11 @@ class MainActivity : Activity() {
             ) {
 
                 if (::modelViewer.isInitialized) {
-
                     try {
-
                         modelViewer.render(
                             frameTimeNanos
                         )
-
                     } catch (e: Exception) {
-
                         Log.e(
                             TAG,
                             "Render error",
@@ -71,7 +63,6 @@ class MainActivity : Activity() {
                 }
 
                 if (renderingStarted) {
-
                     choreographer.postFrameCallback(
                         this
                     )
@@ -79,16 +70,9 @@ class MainActivity : Activity() {
             }
         }
 
-    /*
-     * ------------------------------------------------
-     * CREATE
-     * ------------------------------------------------
-     */
-
     override fun onCreate(
         savedInstanceState: Bundle?
     ) {
-
         super.onCreate(
             savedInstanceState
         )
@@ -98,17 +82,10 @@ class MainActivity : Activity() {
         createUi()
     }
 
-    /*
-     * ------------------------------------------------
-     * UI
-     * ------------------------------------------------
-     */
-
     private fun createUi() {
 
         val root =
             LinearLayout(this).apply {
-
                 orientation =
                     LinearLayout.VERTICAL
 
@@ -116,12 +93,6 @@ class MainActivity : Activity() {
                     Color.BLACK
                 )
             }
-
-        /*
-         * ------------------------------------------------
-         * 3D VIEW
-         * ------------------------------------------------
-         */
 
         textureView =
             TextureView(this)
@@ -134,12 +105,6 @@ class MainActivity : Activity() {
                 0.82f
             )
         )
-
-        /*
-         * ------------------------------------------------
-         * BOTTOM PANEL
-         * ------------------------------------------------
-         */
 
         val bottomPanel =
             LinearLayout(this).apply {
@@ -193,7 +158,6 @@ class MainActivity : Activity() {
                     "Open GLB"
 
                 setOnClickListener {
-
                     openGlbPicker()
                 }
             }
@@ -226,16 +190,9 @@ class MainActivity : Activity() {
         setContentView(root)
 
         textureView.post {
-
             initializeViewer()
         }
     }
-
-    /*
-     * ------------------------------------------------
-     * INITIALIZE FILAMENT
-     * ------------------------------------------------
-     */
 
     private fun initializeViewer() {
 
@@ -250,7 +207,7 @@ class MainActivity : Activity() {
                 modelViewer
             )
 
-            setupEnvironment()
+            setupRendering()
 
             startRendering()
 
@@ -283,108 +240,17 @@ class MainActivity : Activity() {
         }
     }
 
-    /*
-     * ------------------------------------------------
-     * LIGHTING / SKYBOX
-     * ------------------------------------------------
-     */
-
-    private fun setupEnvironment() {
-
-        val engine =
-            modelViewer.engine
-
-        /*
-         * Indirect light.
-         */
-
-        try {
-
-            val indirectLight =
-                IndirectLight.Builder()
-                    .intensity(
-                        50_000.0f
-                    )
-                    .radiance(
-                        1,
-                        floatArrayOf(
-                            1.0f,
-                            1.0f,
-                            1.0f
-                        )
-                    )
-                    .irradiance(
-                        1,
-                        floatArrayOf(
-                            1.0f,
-                            1.0f,
-                            1.0f
-                        )
-                    )
-                    .build(
-                        engine
-                    )
-
-            modelViewer.scene.indirectLight =
-                indirectLight
-
-            Log.d(
-                TAG,
-                "Indirect light installed"
-            )
-
-        } catch (e: Exception) {
-
-            Log.e(
-                TAG,
-                "Indirect light failed",
-                e
-            )
-        }
-
-        /*
-         * Dark background.
-         */
-
-        try {
-
-            val skybox =
-                Skybox.Builder()
-                    .color(
-                        0.05f,
-                        0.05f,
-                        0.05f,
-                        1.0f
-                    )
-                    .build(
-                        engine
-                    )
-
-            modelViewer.scene.skybox =
-                skybox
-
-            Log.d(
-                TAG,
-                "Skybox installed"
-            )
-
-        } catch (e: Exception) {
-
-            Log.e(
-                TAG,
-                "Skybox failed",
-                e
-            )
-        }
-
-        /*
-         * Anti-aliasing.
-         */
+    private fun setupRendering() {
 
         try {
 
             modelViewer.view.antiAliasing =
                 View.AntiAliasing.FXAA
+
+            Log.d(
+                TAG,
+                "FXAA enabled"
+            )
 
         } catch (e: Exception) {
 
@@ -394,13 +260,65 @@ class MainActivity : Activity() {
                 e
             )
         }
+
+        createDirectionalLight()
     }
 
-    /*
-     * ------------------------------------------------
-     * RENDER LOOP
-     * ------------------------------------------------
-     */
+    private fun createDirectionalLight() {
+
+        try {
+
+            val engine =
+                modelViewer.engine
+
+            val entityManager =
+                EntityManager.get()
+
+            lightEntity =
+                entityManager.create()
+
+            LightManager.Builder(
+                LightManager.Type.DIRECTIONAL
+            )
+                .color(
+                    1.0f,
+                    1.0f,
+                    1.0f
+                )
+                .intensity(
+                    100_000.0f
+                )
+                .direction(
+                    0.0f,
+                    -1.0f,
+                    -1.0f
+                )
+                .castShadows(
+                    false
+                )
+                .build(
+                    engine,
+                    lightEntity
+                )
+
+            modelViewer.scene.addEntity(
+                lightEntity
+            )
+
+            Log.d(
+                TAG,
+                "Directional light created"
+            )
+
+        } catch (e: Exception) {
+
+            Log.e(
+                TAG,
+                "Directional light failed",
+                e
+            )
+        }
+    }
 
     private fun startRendering() {
 
@@ -438,12 +356,6 @@ class MainActivity : Activity() {
         )
     }
 
-    /*
-     * ------------------------------------------------
-     * GLB PICKER
-     * ------------------------------------------------
-     */
-
     private fun openGlbPicker() {
 
         val pickerIntent =
@@ -468,21 +380,14 @@ class MainActivity : Activity() {
                 )
             }
 
-        @Suppress("DEPRECATION")
         startActivityForResult(
             pickerIntent,
             REQUEST_GLB
         )
     }
 
-    /*
-     * ------------------------------------------------
-     * PICKER RESULT
-     * ------------------------------------------------
-     */
-
     @Deprecated(
-        "Activity Result API can be used later"
+        "Using Activity Result API later"
     )
     override fun onActivityResult(
         requestCode: Int,
@@ -504,17 +409,10 @@ class MainActivity : Activity() {
         ) {
 
             data?.data?.let { uri ->
-
                 loadGlb(uri)
             }
         }
     }
-
-    /*
-     * ------------------------------------------------
-     * OPEN WITH
-     * ------------------------------------------------
-     */
 
     override fun onNewIntent(
         intent: Intent?
@@ -556,19 +454,12 @@ class MainActivity : Activity() {
                     if (
                         ::modelViewer.isInitialized
                     ) {
-
                         loadGlb(uri)
                     }
                 }
             }
         }
     }
-
-    /*
-     * ------------------------------------------------
-     * LOAD GLB
-     * ------------------------------------------------
-     */
 
     private fun loadGlb(
         uri: Uri
@@ -607,12 +498,7 @@ class MainActivity : Activity() {
                 "GLB size = ${bytes.size} bytes"
             )
 
-            /*
-             * GLB header.
-             */
-
             if (bytes.size < 12) {
-
                 throw IllegalArgumentException(
                     "GLB is smaller than 12 bytes"
                 )
@@ -632,15 +518,10 @@ class MainActivity : Activity() {
             )
 
             if (magic != "glTF") {
-
                 throw IllegalArgumentException(
                     "Invalid GLB magic"
                 )
             }
-
-            /*
-             * GLB uses little endian.
-             */
 
             val header =
                 ByteBuffer
@@ -666,7 +547,6 @@ class MainActivity : Activity() {
             )
 
             if (version != 2) {
-
                 throw IllegalArgumentException(
                     "Unsupported GLB version: $version"
                 )
@@ -676,17 +556,10 @@ class MainActivity : Activity() {
                 declaredLength < 12 ||
                 declaredLength > bytes.size
             ) {
-
                 throw IllegalArgumentException(
                     "Invalid GLB length"
                 )
             }
-
-            /*
-             * ------------------------------------------------
-             * LOAD INTO FILAMENT
-             * ------------------------------------------------
-             */
 
             statusText.text =
                 "Loading GLB..."
@@ -702,26 +575,39 @@ class MainActivity : Activity() {
                 glbBuffer
             )
 
+            /*
+             * IMPORTANT:
+             *
+             * Filament's ModelViewer uses this
+             * transformation to scale and center
+             * the loaded model into a unit cube.
+             *
+             * This is the main visibility fix.
+             */
+            modelViewer.transformToUnitCube()
+
             startRendering()
 
             statusText.text =
-                "GLB accepted - loading resources..."
+                "GLB loaded - preparing view..."
 
             Log.d(
                 TAG,
                 "loadModelGlb() completed"
             )
 
-            /*
-             * Wait for Filament's asynchronous resource
-             * loading to progress.
-             */
+            Log.d(
+                TAG,
+                "transformToUnitCube() applied"
+            )
 
+            /*
+             * Give the resource loader time to
+             * finish GPU resource creation.
+             */
             textureView.postDelayed(
                 {
-
                     inspectModel()
-
                 },
                 1500L
             )
@@ -744,12 +630,6 @@ class MainActivity : Activity() {
             ).show()
         }
     }
-
-    /*
-     * ------------------------------------------------
-     * MODEL DIAGNOSTICS
-     * ------------------------------------------------
-     */
 
     private fun inspectModel() {
 
@@ -774,13 +654,6 @@ class MainActivity : Activity() {
 
             return
         }
-
-        /*
-         * FilamentAsset does not expose entityCount
-         * in this version.
-         *
-         * Use renderableEntities instead.
-         */
 
         val renderableEntities =
             asset.renderableEntities
@@ -823,12 +696,6 @@ class MainActivity : Activity() {
             "================================"
         )
 
-        /*
-         * ------------------------------------------------
-         * RENDERABLE DETAILS
-         * ------------------------------------------------
-         */
-
         val renderableManager =
             modelViewer.engine
                 .renderableManager
@@ -864,21 +731,10 @@ class MainActivity : Activity() {
             }
         }
 
-        /*
-         * ------------------------------------------------
-         * CAMERA DIAGNOSTIC
-         * ------------------------------------------------
-         */
-
         try {
 
             val camera =
                 modelViewer.camera
-
-            /*
-             * Filament Camera.getPosition()
-             * requires an output array.
-             */
 
             val position =
                 FloatArray(3)
@@ -894,10 +750,6 @@ class MainActivity : Activity() {
                     "${position[1]}, " +
                     "${position[2]})"
             )
-
-            /*
-             * Projection matrix.
-             */
 
             val projection =
                 DoubleArray(16)
@@ -919,36 +771,6 @@ class MainActivity : Activity() {
                 e
             )
         }
-
-        /*
-         * ------------------------------------------------
-         * MODEL TRANSFORM
-         * ------------------------------------------------
-         */
-
-        try {
-
-            modelViewer.transformToUnitCube()
-
-            Log.d(
-                TAG,
-                "transformToUnitCube applied"
-            )
-
-        } catch (e: Exception) {
-
-            Log.e(
-                TAG,
-                "transformToUnitCube failed",
-                e
-            )
-        }
-
-        /*
-         * ------------------------------------------------
-         * FINAL DIAGNOSTIC RESULT
-         * ------------------------------------------------
-         */
 
         if (
             renderableCount > 0 &&
@@ -989,12 +811,6 @@ class MainActivity : Activity() {
         startRendering()
     }
 
-    /*
-     * ------------------------------------------------
-     * LIFECYCLE
-     * ------------------------------------------------
-     */
-
     override fun onResume() {
 
         super.onResume()
@@ -1002,7 +818,6 @@ class MainActivity : Activity() {
         if (
             ::modelViewer.isInitialized
         ) {
-
             startRendering()
         }
     }
@@ -1021,6 +836,32 @@ class MainActivity : Activity() {
         if (
             ::modelViewer.isInitialized
         ) {
+
+            try {
+
+                if (lightEntity != 0) {
+
+                    modelViewer.engine
+                        .destroyEntity(
+                            lightEntity
+                        )
+
+                    EntityManager.get()
+                        .destroy(
+                            lightEntity
+                        )
+
+                    lightEntity = 0
+                }
+
+            } catch (e: Exception) {
+
+                Log.w(
+                    TAG,
+                    "Light cleanup failed",
+                    e
+                )
+            }
 
             try {
 
