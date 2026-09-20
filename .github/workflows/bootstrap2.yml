@@ -30,28 +30,52 @@ jobs:
 
 
       # ============================================================
-      # 3. GRADLE 8.9
+      # 3. ANDROID SDK 37
       # ============================================================
-      - name: Setup Gradle 8.9
+      - name: Setup Android SDK
+        shell: bash
+        run: |
+          set -e
+
+          yes | sdkmanager --licenses >/dev/null || true
+
+          sdkmanager \
+            "platform-tools" \
+            "platforms;android-37" \
+            "build-tools;36.0.0"
+
+          yes | sdkmanager --licenses >/dev/null || true
+
+          echo "Installed Android platforms:"
+          sdkmanager --list_installed | grep "platforms;android-37" || true
+
+          echo "Installed build tools:"
+          sdkmanager --list_installed | grep "build-tools;36.0.0" || true
+
+
+      # ============================================================
+      # 4. GRADLE 9.5
+      # ============================================================
+      - name: Setup Gradle 9.5
         shell: bash
         run: |
           set -e
 
           wget -q \
-            https://services.gradle.org/distributions/gradle-8.9-bin.zip \
+            https://services.gradle.org/distributions/gradle-9.5-bin.zip \
             -O /tmp/gradle.zip
 
           unzip -q \
             /tmp/gradle.zip \
             -d /opt
 
-          echo "/opt/gradle-8.9/bin" >> "$GITHUB_PATH"
+          echo "/opt/gradle-9.5/bin" >> "$GITHUB_PATH"
 
           gradle --version
 
 
       # ============================================================
-      # 4. CREATE DIRECTORIES
+      # 5. CREATE DIRECTORIES
       # ============================================================
       - name: Create project directories
         shell: bash
@@ -61,6 +85,7 @@ jobs:
           mkdir -p .github/workflows
 
           mkdir -p app/src/main/java/com/pifuhdc/viewer
+
           mkdir -p app/src/main/res/values
 
           mkdir -p app/src/main/assets/models
@@ -74,38 +99,38 @@ jobs:
 
 
       # ============================================================
-      # 5. DOWNLOAD OFFICIAL FILAMENT 1.77.0 AARS
+      # 6. DOWNLOAD FILAMENT 1.77.0
       # ============================================================
-      - name: Download Filament Android libraries
+      - name: Download Filament 1.77.0
         shell: bash
         run: |
           set -e
 
-          FILAMENT_VERSION="1.77.0"
+          VERSION="1.77.0"
 
-          BASE_URL="https://github.com/google/filament/releases/download/v${FILAMENT_VERSION}"
+          BASE_URL="https://github.com/google/filament/releases/download/v${VERSION}"
 
-          echo "Downloading Filament ${FILAMENT_VERSION}..."
+          echo "Downloading official Filament ${VERSION}..."
 
           wget -q \
-            "${BASE_URL}/filament-v${FILAMENT_VERSION}-android.aar" \
+            "${BASE_URL}/filament-v${VERSION}-android.aar" \
             -O app/libs/filament.aar
 
           wget -q \
-            "${BASE_URL}/gltfio-v${FILAMENT_VERSION}-android.aar" \
+            "${BASE_URL}/gltfio-v${VERSION}-android.aar" \
             -O app/libs/gltfio.aar
 
           wget -q \
-            "${BASE_URL}/filament-utils-v${FILAMENT_VERSION}-android.aar" \
+            "${BASE_URL}/filament-utils-v${VERSION}-android.aar" \
             -O app/libs/filament-utils.aar
 
           echo ""
-          echo "Downloaded Filament libraries:"
+          echo "Filament files:"
           ls -lh app/libs/
 
 
       # ============================================================
-      # 6. SETTINGS
+      # 7. SETTINGS
       # ============================================================
       - name: Write settings.gradle.kts
         shell: bash
@@ -139,34 +164,34 @@ jobs:
 
 
       # ============================================================
-      # 7. ROOT BUILD
+      # 8. ROOT BUILD
       # ============================================================
       - name: Write root build.gradle.kts
         shell: bash
         run: |
           cat > build.gradle.kts <<'EOF'
           plugins {
-              id("com.android.application") version "8.7.3" apply false
-              id("org.jetbrains.kotlin.android") version "2.0.21" apply false
+              id("com.android.application") version "9.3.3" apply false
+              id("org.jetbrains.kotlin.android") version "2.2.10" apply false
           }
           EOF
 
 
       # ============================================================
-      # 8. GRADLE PROPERTIES
+      # 9. GRADLE PROPERTIES
       # ============================================================
       - name: Write gradle.properties
         shell: bash
         run: |
           cat > gradle.properties <<'EOF'
-          org.gradle.jvmargs=-Xmx2g -Dfile.encoding=UTF-8
+          org.gradle.jvmargs=-Xmx3g -Dfile.encoding=UTF-8
           android.useAndroidX=true
           kotlin.code.style=official
           EOF
 
 
       # ============================================================
-      # 9. APP BUILD FILE
+      # 10. APP BUILD
       # ============================================================
       - name: Write app/build.gradle.kts
         shell: bash
@@ -181,7 +206,7 @@ jobs:
 
               namespace = "com.pifuhdc.viewer"
 
-              compileSdk = 35
+              compileSdk = 37
 
               defaultConfig {
 
@@ -190,11 +215,11 @@ jobs:
 
                   minSdk = 26
 
-                  targetSdk = 35
+                  targetSdk = 37
 
-                  versionCode = 2
+                  versionCode = 3
 
-                  versionName = "0.2.0"
+                  versionName = "0.3.0"
               }
 
               buildTypes {
@@ -257,7 +282,7 @@ jobs:
 
 
       # ============================================================
-      # 10. MANIFEST
+      # 11. MANIFEST
       # ============================================================
       - name: Write AndroidManifest.xml
         shell: bash
@@ -289,7 +314,6 @@ jobs:
 
                       </intent-filter>
 
-
                       <intent-filter>
 
                           <action
@@ -315,7 +339,7 @@ jobs:
 
 
       # ============================================================
-      # 11. STRINGS
+      # 12. STRINGS
       # ============================================================
       - name: Write strings.xml
         shell: bash
@@ -334,7 +358,7 @@ jobs:
 
 
       # ============================================================
-      # 12. STYLE
+      # 13. STYLE
       # ============================================================
       - name: Write styles.xml
         shell: bash
@@ -371,7 +395,7 @@ jobs:
 
 
       # ============================================================
-      # 13. PROGUARD
+      # 14. PROGUARD
       # ============================================================
       - name: Write proguard-rules.pro
         shell: bash
@@ -382,7 +406,7 @@ jobs:
 
 
       # ============================================================
-      # 14. MAIN ACTIVITY
+      # 15. MAIN ACTIVITY
       # ============================================================
       - name: Write MainActivity.kt
         shell: bash
@@ -479,11 +503,9 @@ jobs:
                   val openButton =
                       Button(this).apply {
 
-                          text =
-                              "Open GLB"
+                          text = "Open GLB"
 
                           setOnClickListener {
-
                               openGlbPicker()
                           }
                       }
@@ -589,7 +611,6 @@ jobs:
                   )
 
                   if (::modelViewer.isInitialized) {
-
                       modelViewer.destroy()
                   }
 
@@ -642,9 +663,7 @@ jobs:
               }
 
 
-              @Deprecated(
-                  "Bootstrap 2"
-              )
+              @Deprecated("Bootstrap 2")
               override fun onActivityResult(
                   requestCode: Int,
                   resultCode: Int,
@@ -667,7 +686,6 @@ jobs:
                   ) {
 
                       data?.data?.let {
-
                           loadGlb(it)
                       }
                   }
@@ -706,7 +724,6 @@ jobs:
                           contentResolver
                               .openInputStream(uri)
                               ?.use {
-
                                   it.readBytes()
                               }
                               ?: throw IllegalStateException(
@@ -740,9 +757,7 @@ jobs:
 
 
                       val sizeMb =
-                          bytes.size /
-                              1024 /
-                              1024
+                          bytes.size / 1024 / 1024
 
 
                       statusText.text =
@@ -786,7 +801,7 @@ jobs:
 
 
       # ============================================================
-      # 15. PLACEHOLDERS
+      # 16. PLACEHOLDER FILES
       # ============================================================
       - name: Create placeholder files
         shell: bash
@@ -797,7 +812,7 @@ jobs:
 
 
       # ============================================================
-      # 16. GENERATE GRADLE WRAPPER
+      # 17. GENERATE WRAPPER
       # ============================================================
       - name: Generate Gradle wrapper
         shell: bash
@@ -805,32 +820,45 @@ jobs:
           set -e
 
           gradle wrapper \
-            --gradle-version 8.9
+            --gradle-version 9.5
 
           chmod +x gradlew
 
 
       # ============================================================
-      # 17. VERIFY FILAMENT FILES
+      # 18. VERIFY SDK
       # ============================================================
-      - name: Verify Filament libraries
+      - name: Verify Android SDK
         shell: bash
         run: |
           set -e
 
-          echo "Filament libraries:"
+          echo "ANDROID_HOME=$ANDROID_HOME"
 
-          ls -lh app/libs/
+          test -d "$ANDROID_HOME/platforms/android-37"
+
+          echo "Android API 37 is installed."
+
+
+      # ============================================================
+      # 19. VERIFY FILAMENT
+      # ============================================================
+      - name: Verify Filament AARs
+        shell: bash
+        run: |
+          set -e
 
           test -s app/libs/filament.aar
           test -s app/libs/gltfio.aar
           test -s app/libs/filament-utils.aar
 
-          echo "All Filament AARs are present."
+          ls -lh app/libs/
+
+          echo "Filament AARs verified."
 
 
       # ============================================================
-      # 18. BUILD
+      # 20. BUILD APK
       # ============================================================
       - name: Build Debug APK
         shell: bash
@@ -844,7 +872,7 @@ jobs:
 
 
       # ============================================================
-      # 19. CHECK APK
+      # 21. CHECK APK
       # ============================================================
       - name: Check APK
         shell: bash
@@ -856,7 +884,7 @@ jobs:
 
 
       # ============================================================
-      # 20. UPLOAD APK
+      # 22. UPLOAD APK
       # ============================================================
       - name: Upload Debug APK
         uses: actions/upload-artifact@v4
@@ -867,7 +895,7 @@ jobs:
 
 
       # ============================================================
-      # 21. COMMIT PROJECT
+      # 23. COMMIT PROJECT
       # ============================================================
       - name: Commit Bootstrap 2 project
         shell: bash
