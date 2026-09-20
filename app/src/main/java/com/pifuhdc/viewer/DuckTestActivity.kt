@@ -5,23 +5,24 @@ import android.content.Intent
 import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
+import android.view.Choreographer
 import android.view.Gravity
+import android.view.TextureView
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
-import io.github.sceneview.SceneView
-import io.github.sceneview.createDefaultCameraManipulator
-import io.github.sceneview.loaders.ModelLoader
-import io.github.sceneview.math.Position
-import io.github.sceneview.node.ModelNode
+import com.google.android.filament.utils.ModelViewer
+import com.google.android.filament.utils.Utils
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 
 class DuckTestActivity : Activity() {
 
-    private lateinit var sceneView: SceneView
+    private lateinit var textureView: TextureView
     private lateinit var statusText: TextView
-    private lateinit var modelLoader: ModelLoader
 
-    private var modelNode: ModelNode? = null
+    private var modelViewer: ModelViewer? = null
+    private var rendering = false
 
     companion object {
         private const val REQUEST_GLB = 9001
@@ -30,9 +31,10 @@ class DuckTestActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        Utils.init()
         createUi()
 
-        sceneView.post {
+        textureView.post {
             initializeViewer()
         }
     }
@@ -43,12 +45,12 @@ class DuckTestActivity : Activity() {
             setBackgroundColor(Color.BLACK)
         }
 
-        sceneView = SceneView(this).apply {
+        textureView = TextureView(this).apply {
             setBackgroundColor(Color.BLACK)
         }
 
         root.addView(
-            sceneView,
+            textureView,
             LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 0,
@@ -60,11 +62,11 @@ class DuckTestActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
             setBackgroundColor(Color.WHITE)
-            setPadding(24, 12, 24, 12)
+            setPadding(24,12,24,12)
         }
 
         statusText = TextView(this).apply {
-            text = "Starting SceneView..."
+            text = "Starting renderer..."
             textSize = 16f
             setTextColor(Color.BLACK)
             gravity = Gravity.CENTER
@@ -72,18 +74,14 @@ class DuckTestActivity : Activity() {
 
         val openButton = Button(this).apply {
             text = "OPEN GLB"
-
-            setOnClickListener {
-                openGlb()
-            }
+            setOnClickListener { openGlb() }
         }
 
         bottomPanel.addView(
             statusText,
             LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
-                0,
-                1f
+                LinearLayout.LayoutParams.WRAP_CONTENT
             )
         )
 
@@ -99,7 +97,7 @@ class DuckTestActivity : Activity() {
             bottomPanel,
             LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
-                220
+                LinearLayout.LayoutParams.WRAP_CONTENT
             )
         )
 
@@ -108,18 +106,11 @@ class DuckTestActivity : Activity() {
 
     private fun initializeViewer() {
         try {
-            modelLoader = ModelLoader(sceneView.engine)
-
-            sceneView.cameraManipulator =
-                createDefaultCameraManipulator(
-                    orbitRadius = 2.0f,
-                    targetPosition = Position(0f, 0f, 0f)
-                )
-
-            statusText.text = "SceneView ready • Open Duck.glb"
-
+            modelViewer = ModelViewer(textureView)
+            statusText.text = "Renderer ready • Open GLB"
+            startRendering()
         } catch (e: Exception) {
-            statusText.text = "Viewer error: ${e.message}"
+            statusText.text = "Renderer error: ${e.message}"
         }
     }
 
@@ -127,13 +118,12 @@ class DuckTestActivity : Activity() {
         val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
             addCategory(Intent.CATEGORY_OPENABLE)
             type = "*/*"
-
             putExtra(
                 Intent.EXTRA_MIME_TYPES,
                 arrayOf(
                     "model/gltf-binary",
-                    "model/gltf+json",
-                    "application/octet-stream"
+                    "application/octet-stream",
+                    "*/*"
                 )
             )
         }
@@ -160,36 +150,86 @@ class DuckTestActivity : Activity() {
 
     private fun loadGlb(uri: Uri) {
         try {
-            statusText.text = "Loading GLB..."
+            statusText.text = "Reading GLB..."
 
-            modelNode?.let {
-                sceneView.removeChildNode(it)
+            val bytes = contentResolver.openInputStream(uri)
+                ?.use { it.readBytes() }
+                ?: throw Exception("Unable to read file")
+
+            if (bytes.size < 12) {
+                throw Exception("Invalid GLB")
             }
 
-            modelLoader.loadModelInstanceAsync(uri.toString()) { instance ->
+            val buffer = ByteBuffer.wrap(bytes)
+                .order(ByteOrder.LITTLE_ENDIAN)
 
-                val node = ModelNode(
-                    modelInstance = instance,
-                    scaleToUnits = 1.0f,
-                    autoAnimate = true,
-                    centerOrigin = Position(0f, 0f, 0f)
-                )
+            val magic = buffer.int
+            val version = buffer.int
+            val length = buffer.int
 
-                sceneView.addChildNode(node)
-                modelNode = node
-
-                statusText.post {
-                    statusText.text = "GLB loaded • Orbit • Zoom • Pan"
-                }
+            if (magic != 0x46546C67) {
+                throw Exception("Not GLB")
             }
+
+            if (version != 2) {
+                throw Exception("Unsupported GLB v$version")
+            }
+
+            if (length > bytes.size) {
+                throw Exception("Corrupted GLB")
+            }
+
+            buffer.position(0)
+
+            modelViewer?.loadModelGlb(buffer)
+            modelViewer?.transformToUnitCube()
+
+            statusText.text = "GLB loaded ✓"
 
         } catch (e: Exception) {
             statusText.text = "GLB error: ${e.message}"
         }
     }
 
+    private fun startRendering() {
+        if (rendering) return
+
+        rendering = true
+        Choreographer.getInstance().postFrameCallback(frameCallback)
+    }
+
+    private val frameCallback =
+        object : Choreographer.FrameCallback {
+
+            override fun doFrame(frameTimeNanos: Long) {
+
+                if (!rendering) return
+
+                modelViewer?.render(frameTimeNanos)
+
+                Choreographer.getInstance().postFrameCallback(this)
+            }
+        }
+
+    override fun onResume() {
+        super.onResume()
+
+        if (modelViewer != null) {
+            startRendering()
+        }
+    }
+
+    override fun onPause() {
+        rendering = false
+        Choreographer.getInstance().removeFrameCallback(frameCallback)
+        super.onPause()
+    }
+
     override fun onDestroy() {
-        modelNode = null
+        rendering = false
+        Choreographer.getInstance().removeFrameCallback(frameCallback)
+        modelViewer?.destroy()
+        modelViewer = null
         super.onDestroy()
     }
 }
