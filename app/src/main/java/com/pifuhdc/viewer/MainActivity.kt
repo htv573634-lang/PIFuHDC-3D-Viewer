@@ -20,13 +20,15 @@ class MainActivity : Activity() {
     private lateinit var modelViewer: ModelViewer
     private lateinit var statusText: TextView
 
-    private val choreographer = Choreographer.getInstance()
+    private val choreographer =
+        Choreographer.getInstance()
 
     private val frameCallback =
         object : Choreographer.FrameCallback {
 
-            override fun doFrame(frameTimeNanos: Long) {
-
+            override fun doFrame(
+                frameTimeNanos: Long
+            ) {
                 if (::modelViewer.isInitialized) {
                     modelViewer.render(frameTimeNanos)
                 }
@@ -35,31 +37,24 @@ class MainActivity : Activity() {
             }
         }
 
-    override fun onCreate(savedInstanceState: Bundle?) {
+    override fun onCreate(
+        savedInstanceState: Bundle?
+    ) {
         super.onCreate(savedInstanceState)
 
-        createViewerUi()
+        createViewer()
 
         handleIntent(intent)
     }
 
-    // ============================================================
-    // UI
-    // ============================================================
-
-    private fun createViewerUi() {
+    private fun createViewer() {
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
         }
 
-        // --------------------------------------------------------
-        // Top controls
-        // --------------------------------------------------------
-
-        val controls = LinearLayout(this).apply {
+        val toolbar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-
             setPadding(
                 16,
                 12,
@@ -69,7 +64,6 @@ class MainActivity : Activity() {
         }
 
         val openButton = Button(this).apply {
-
             text = "Open GLB"
 
             setOnClickListener {
@@ -78,9 +72,7 @@ class MainActivity : Activity() {
         }
 
         statusText = TextView(this).apply {
-
-            text = "No GLB model loaded"
-
+            text = "No model loaded"
             setPadding(
                 16,
                 0,
@@ -89,7 +81,7 @@ class MainActivity : Activity() {
             )
         }
 
-        controls.addView(
+        toolbar.addView(
             openButton,
             LinearLayout.LayoutParams(
                 0,
@@ -98,7 +90,7 @@ class MainActivity : Activity() {
             )
         )
 
-        controls.addView(
+        toolbar.addView(
             statusText,
             LinearLayout.LayoutParams(
                 0,
@@ -107,22 +99,18 @@ class MainActivity : Activity() {
             )
         )
 
-        // --------------------------------------------------------
-        // Filament surface
-        // --------------------------------------------------------
+        val textureView =
+            TextureView(this)
 
-        val textureView = TextureView(this)
+        modelViewer =
+            ModelViewer(textureView)
 
-        modelViewer = ModelViewer(textureView)
-
-        textureView.setOnTouchListener(modelViewer)
-
-        // --------------------------------------------------------
-        // Add views
-        // --------------------------------------------------------
+        textureView.setOnTouchListener(
+            modelViewer
+        )
 
         root.addView(
-            controls,
+            toolbar,
             LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
@@ -141,28 +129,30 @@ class MainActivity : Activity() {
         setContentView(root)
     }
 
-    // ============================================================
-    // Lifecycle
-    // ============================================================
-
     override fun onResume() {
         super.onResume()
 
         if (::modelViewer.isInitialized) {
-            choreographer.postFrameCallback(frameCallback)
+            choreographer.postFrameCallback(
+                frameCallback
+            )
         }
     }
 
     override fun onPause() {
 
-        choreographer.removeFrameCallback(frameCallback)
+        choreographer.removeFrameCallback(
+            frameCallback
+        )
 
         super.onPause()
     }
 
     override fun onDestroy() {
 
-        choreographer.removeFrameCallback(frameCallback)
+        choreographer.removeFrameCallback(
+            frameCallback
+        )
 
         if (::modelViewer.isInitialized) {
             modelViewer.destroy()
@@ -171,67 +161,60 @@ class MainActivity : Activity() {
         super.onDestroy()
     }
 
-    // ============================================================
-    // Android OPEN WITH
-    // ============================================================
-
-    override fun onNewIntent(intent: Intent?) {
-
+    override fun onNewIntent(
+        intent: Intent?
+    ) {
         super.onNewIntent(intent)
 
         if (intent != null) {
-
             setIntent(intent)
-
             handleIntent(intent)
         }
     }
 
-    private fun handleIntent(intent: Intent) {
+    private fun handleIntent(
+        intent: Intent
+    ) {
 
         if (
             intent.action == Intent.ACTION_VIEW &&
             intent.data != null
         ) {
-
             loadGlb(intent.data!!)
         }
     }
 
-    // ============================================================
-    // FILE PICKER
-    // ============================================================
-
     private fun openGlbPicker() {
 
-        val intent = Intent(
-            Intent.ACTION_OPEN_DOCUMENT
-        ).apply {
+        val pickerIntent =
+            Intent(
+                Intent.ACTION_OPEN_DOCUMENT
+            ).apply {
 
-            addCategory(
-                Intent.CATEGORY_OPENABLE
-            )
-
-            type = "*/*"
-
-            putExtra(
-                Intent.EXTRA_MIME_TYPES,
-                arrayOf(
-                    "model/gltf-binary",
-                    "model/gltf+json",
-                    "application/octet-stream"
+                addCategory(
+                    Intent.CATEGORY_OPENABLE
                 )
-            )
-        }
+
+                type = "*/*"
+
+                putExtra(
+                    Intent.EXTRA_MIME_TYPES,
+                    arrayOf(
+                        "model/gltf-binary",
+                        "model/gltf+json",
+                        "application/octet-stream"
+                    )
+                )
+            }
 
         startActivityForResult(
-            intent,
+            pickerIntent,
             REQUEST_GLB
         )
     }
 
     @Deprecated(
-        "Using Activity Result API will be added in a later viewer revision."
+        "Activity Result API will be used in a later revision."
     )
     override fun onActivityResult(
         requestCode: Int,
@@ -251,17 +234,14 @@ class MainActivity : Activity() {
         ) {
 
             data?.data?.let { uri ->
-
                 loadGlb(uri)
             }
         }
     }
 
-    // ============================================================
-    // GLB LOADING
-    // ============================================================
-
-    private fun loadGlb(uri: Uri) {
+    private fun loadGlb(
+        uri: Uri
+    ) {
 
         try {
 
@@ -275,17 +255,12 @@ class MainActivity : Activity() {
                         input.readBytes()
                     }
                     ?: throw IllegalStateException(
-                        "Unable to open GLB file"
+                        "Unable to open file"
                     )
 
-            // ----------------------------------------------------
-            // Basic GLB validation
-            // ----------------------------------------------------
-
             if (bytes.size < 12) {
-
                 throw IllegalArgumentException(
-                    "File is too small to be a GLB"
+                    "File is too small"
                 )
             }
 
@@ -298,28 +273,21 @@ class MainActivity : Activity() {
                 )
 
             if (magic != "glTF") {
-
                 throw IllegalArgumentException(
-                    "Selected file is not a valid GLB"
+                    "Not a valid GLB file"
                 )
             }
 
-            // GLB version is stored at bytes 4-7.
             val version =
                 ByteBuffer
                     .wrap(bytes)
                     .getInt(4)
 
             if (version != 2) {
-
                 throw IllegalArgumentException(
                     "Unsupported GLB version: $version"
                 )
             }
-
-            // ----------------------------------------------------
-            // File size
-            // ----------------------------------------------------
 
             val sizeMb =
                 bytes.size /
@@ -327,33 +295,25 @@ class MainActivity : Activity() {
                     1024.0
 
             statusText.text =
-                "Loading %.1f MB GLB...".format(sizeMb)
-
-            // ----------------------------------------------------
-            // Load into Filament
-            // ----------------------------------------------------
+                "Loading %.1f MB...".format(sizeMb)
 
             modelViewer.loadModelGlb(
                 ByteBuffer.wrap(bytes)
             )
 
-            // ----------------------------------------------------
-            // Automatically fit model
-            // ----------------------------------------------------
-
             modelViewer.transformToUnitCube()
 
             statusText.text =
-                "GLB loaded • Rotate / zoom"
+                "Model loaded"
 
         } catch (e: Exception) {
 
             statusText.text =
-                "GLB load failed"
+                "Load failed"
 
             Toast.makeText(
                 this,
-                "Could not load GLB: ${e.message}",
+                "GLB error: ${e.message}",
                 Toast.LENGTH_LONG
             ).show()
         }
