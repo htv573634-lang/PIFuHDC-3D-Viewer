@@ -1,0 +1,765 @@
+name: Bootstrap 2 - PIFuHDC 3D Viewer
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  bootstrap2:
+    runs-on: ubuntu-22.04
+
+    steps:
+
+      # ------------------------------------------------------------
+      # 1. Checkout repository
+      # ------------------------------------------------------------
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ------------------------------------------------------------
+      # 2. Java 17
+      # ------------------------------------------------------------
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      # ------------------------------------------------------------
+      # 3. Download Gradle 8.9
+      # ------------------------------------------------------------
+      - name: Setup Gradle 8.9
+        shell: bash
+        run: |
+          set -e
+
+          wget -q \
+            https://services.gradle.org/distributions/gradle-8.9-bin.zip \
+            -O /tmp/gradle-8.9-bin.zip
+
+          unzip -q /tmp/gradle-8.9-bin.zip -d /opt
+
+          echo "/opt/gradle-8.9/bin" >> "$GITHUB_PATH"
+
+          gradle --version
+
+      # ------------------------------------------------------------
+      # 4. Create directories
+      # ------------------------------------------------------------
+      - name: Create project directories
+        shell: bash
+        run: |
+          set -e
+
+          mkdir -p app/src/main/java/com/pifuhdc/viewer
+          mkdir -p app/src/main/res/values
+          mkdir -p app/src/main/assets/models
+          mkdir -p app/src/main/assets/sample
+          mkdir -p app/src/main/cpp
+
+          mkdir -p gradle/wrapper
+
+      # ------------------------------------------------------------
+      # 5. settings.gradle.kts
+      # ------------------------------------------------------------
+      - name: Write settings.gradle.kts
+        shell: bash
+        run: |
+          cat > settings.gradle.kts <<'EOF'
+          import org.gradle.api.initialization.resolve.RepositoriesMode
+
+          pluginManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+                  gradlePluginPortal()
+              }
+          }
+
+          dependencyResolutionManagement {
+              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+
+          rootProject.name = "PIFuHDC-3D-Viewer"
+
+          include(":app")
+          EOF
+
+      # ------------------------------------------------------------
+      # 6. Root build.gradle.kts
+      # ------------------------------------------------------------
+      - name: Write root build.gradle.kts
+        shell: bash
+        run: |
+          cat > build.gradle.kts <<'EOF'
+          plugins {
+              id("com.android.application") version "8.7.3" apply false
+              id("org.jetbrains.kotlin.android") version "2.0.21" apply false
+          }
+          EOF
+
+      # ------------------------------------------------------------
+      # 7. gradle.properties
+      # ------------------------------------------------------------
+      - name: Write gradle.properties
+        shell: bash
+        run: |
+          cat > gradle.properties <<'EOF'
+          org.gradle.jvmargs=-Xmx2g -Dfile.encoding=UTF-8
+          android.useAndroidX=true
+          kotlin.code.style=official
+          EOF
+
+      # ------------------------------------------------------------
+      # 8. app/build.gradle.kts
+      # ------------------------------------------------------------
+      - name: Write app/build.gradle.kts
+        shell: bash
+        run: |
+          cat > app/build.gradle.kts <<'EOF'
+          plugins {
+              id("com.android.application")
+              id("org.jetbrains.kotlin.android")
+          }
+
+          android {
+              namespace = "com.pifuhdc.viewer"
+
+              compileSdk = 35
+
+              defaultConfig {
+                  applicationId = "com.pifuhdc.viewer"
+
+                  minSdk = 26
+                  targetSdk = 35
+
+                  versionCode = 2
+                  versionName = "0.2.0"
+              }
+
+              buildTypes {
+                  release {
+                      isMinifyEnabled = false
+
+                      proguardFiles(
+                          getDefaultProguardFile(
+                              "proguard-android-optimize.txt"
+                          ),
+                          "proguard-rules.pro"
+                      )
+                  }
+              }
+
+              compileOptions {
+                  sourceCompatibility = JavaVersion.VERSION_17
+                  targetCompatibility = JavaVersion.VERSION_17
+              }
+
+              kotlinOptions {
+                  jvmTarget = "17"
+              }
+
+              packaging {
+                  resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
+              }
+          }
+
+          dependencies {
+
+              implementation(
+                  "com.google.android.filament:filament-android:1.77.0"
+              )
+
+              implementation(
+                  "com.google.android.filament:gltfio-android:1.77.0"
+              )
+
+              implementation(
+                  "com.google.android.filament:filament-utils-android:1.77.0"
+              )
+          }
+          EOF
+
+      # ------------------------------------------------------------
+      # 9. AndroidManifest.xml
+      # ------------------------------------------------------------
+      - name: Write AndroidManifest.xml
+        shell: bash
+        run: |
+          cat > app/src/main/AndroidManifest.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+
+          <manifest
+              xmlns:android="http://schemas.android.com/apk/res/android">
+
+              <application
+                  android:allowBackup="true"
+                  android:label="@string/app_name"
+                  android:supportsRtl="true"
+                  android:theme="@style/AppTheme">
+
+                  <activity
+                      android:name=".MainActivity"
+                      android:screenOrientation="portrait"
+                      android:exported="true">
+
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LAUNCHER" />
+                      </intent-filter>
+
+                      <intent-filter>
+                          <action android:name="android.intent.action.VIEW" />
+
+                          <category android:name="android.intent.category.DEFAULT" />
+                          <category android:name="android.intent.category.BROWSABLE" />
+
+                          <data android:mimeType="model/gltf-binary" />
+                      </intent-filter>
+
+                  </activity>
+
+              </application>
+
+          </manifest>
+          EOF
+
+      # ------------------------------------------------------------
+      # 10. strings.xml
+      # ------------------------------------------------------------
+      - name: Write strings.xml
+        shell: bash
+        run: |
+          cat > app/src/main/res/values/strings.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+
+          <resources>
+
+              <string name="app_name">
+                  PIFuHDC 3D Viewer
+              </string>
+
+          </resources>
+          EOF
+
+      # ------------------------------------------------------------
+      # 11. styles.xml
+      # ------------------------------------------------------------
+      - name: Write styles.xml
+        shell: bash
+        run: |
+          cat > app/src/main/res/values/styles.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+
+          <resources>
+
+              <style
+                  name="AppTheme"
+                  parent="android:style/Theme.Material.Light.NoActionBar">
+
+                  <item name="android:fontFamily">sans</item>
+
+                  <item name="android:statusBarColor">
+                      #000000
+                  </item>
+
+                  <item name="android:navigationBarColor">
+                      #000000
+                  </item>
+
+                  <item name="android:windowLightStatusBar">
+                      false
+                  </item>
+
+              </style>
+
+          </resources>
+          EOF
+
+      # ------------------------------------------------------------
+      # 12. proguard-rules.pro
+      # ------------------------------------------------------------
+      - name: Write proguard-rules.pro
+        shell: bash
+        run: |
+          cat > app/proguard-rules.pro <<'EOF'
+          # PIFuHDC 3D Viewer
+          # Bootstrap 2
+          EOF
+
+      # ------------------------------------------------------------
+      # 13. MainActivity.kt
+      # ------------------------------------------------------------
+      - name: Write MainActivity.kt
+        shell: bash
+        run: |
+          cat > app/src/main/java/com/pifuhdc/viewer/MainActivity.kt <<'EOF'
+          package com.pifuhdc.viewer
+
+          import android.app.Activity
+          import android.content.Intent
+          import android.net.Uri
+          import android.os.Bundle
+          import android.view.Choreographer
+          import android.view.TextureView
+          import android.widget.Button
+          import android.widget.LinearLayout
+          import android.widget.TextView
+          import android.widget.Toast
+
+          import com.google.android.filament.utils.ModelViewer
+
+          import java.nio.ByteBuffer
+
+
+          class MainActivity : Activity() {
+
+              private lateinit var modelViewer: ModelViewer
+              private lateinit var statusText: TextView
+
+              private val choreographer =
+                  Choreographer.getInstance()
+
+              private val frameCallback =
+                  object : Choreographer.FrameCallback {
+
+                      override fun doFrame(
+                          frameTimeNanos: Long
+                      ) {
+                          if (::modelViewer.isInitialized) {
+                              modelViewer.render(frameTimeNanos)
+                          }
+
+                          choreographer.postFrameCallback(this)
+                      }
+                  }
+
+
+              override fun onCreate(
+                  savedInstanceState: Bundle?
+              ) {
+                  super.onCreate(savedInstanceState)
+
+                  createViewerUi()
+
+                  handleIntent(intent)
+              }
+
+
+              private fun createViewerUi() {
+
+                  val root =
+                      LinearLayout(this).apply {
+                          orientation =
+                              LinearLayout.VERTICAL
+                      }
+
+
+                  val controls =
+                      LinearLayout(this).apply {
+                          orientation =
+                              LinearLayout.HORIZONTAL
+
+                          setPadding(
+                              16,
+                              12,
+                              16,
+                              12
+                          )
+                      }
+
+
+                  val openButton =
+                      Button(this).apply {
+
+                          text = "Open GLB"
+
+                          setOnClickListener {
+                              openGlbPicker()
+                          }
+                      }
+
+
+                  statusText =
+                      TextView(this).apply {
+
+                          text =
+                              "No GLB model loaded"
+
+                          setPadding(
+                              16,
+                              0,
+                              8,
+                              0
+                          )
+                      }
+
+
+                  controls.addView(
+                      openButton,
+                      LinearLayout.LayoutParams(
+                          0,
+                          LinearLayout.LayoutParams.WRAP_CONTENT,
+                          1f
+                      )
+                  )
+
+
+                  controls.addView(
+                      statusText,
+                      LinearLayout.LayoutParams(
+                          0,
+                          LinearLayout.LayoutParams.WRAP_CONTENT,
+                          2f
+                      )
+                  )
+
+
+                  val textureView =
+                      TextureView(this)
+
+
+                  modelViewer =
+                      ModelViewer(textureView)
+
+
+                  textureView.setOnTouchListener(
+                      modelViewer
+                  )
+
+
+                  root.addView(
+                      controls,
+                      LinearLayout.LayoutParams(
+                          LinearLayout.LayoutParams.MATCH_PARENT,
+                          LinearLayout.LayoutParams.WRAP_CONTENT
+                      )
+                  )
+
+
+                  root.addView(
+                      textureView,
+                      LinearLayout.LayoutParams(
+                          LinearLayout.LayoutParams.MATCH_PARENT,
+                          0,
+                          1f
+                      )
+                  )
+
+
+                  setContentView(root)
+              }
+
+
+              override fun onResume() {
+                  super.onResume()
+
+                  choreographer.postFrameCallback(
+                      frameCallback
+                  )
+              }
+
+
+              override fun onPause() {
+
+                  choreographer.removeFrameCallback(
+                      frameCallback
+                  )
+
+                  super.onPause()
+              }
+
+
+              override fun onDestroy() {
+
+                  choreographer.removeFrameCallback(
+                      frameCallback
+                  )
+
+                  if (::modelViewer.isInitialized) {
+                      modelViewer.destroy()
+                  }
+
+                  super.onDestroy()
+              }
+
+
+              override fun onNewIntent(
+                  intent: Intent?
+              ) {
+                  super.onNewIntent(intent)
+
+                  if (intent != null) {
+                      setIntent(intent)
+                      handleIntent(intent)
+                  }
+              }
+
+
+              private fun openGlbPicker() {
+
+                  val intent =
+                      Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+
+                          addCategory(
+                              Intent.CATEGORY_OPENABLE
+                          )
+
+                          type = "*/*"
+
+                          putExtra(
+                              Intent.EXTRA_MIME_TYPES,
+                              arrayOf(
+                                  "model/gltf-binary",
+                                  "application/octet-stream"
+                              )
+                          )
+                      }
+
+
+                  startActivityForResult(
+                      intent,
+                      REQUEST_GLB
+                  )
+              }
+
+
+              @Deprecated(
+                  "Using Activity Result API is unnecessary for Bootstrap 2."
+              )
+              override fun onActivityResult(
+                  requestCode: Int,
+                  resultCode: Int,
+                  data: Intent?
+              ) {
+
+                  super.onActivityResult(
+                      requestCode,
+                      resultCode,
+                      data
+                  )
+
+
+                  if (
+                      requestCode == REQUEST_GLB &&
+                      resultCode == RESULT_OK
+                  ) {
+
+                      val uri =
+                          data?.data
+
+                      if (uri != null) {
+                          loadGlb(uri)
+                      }
+                  }
+              }
+
+
+              private fun handleIntent(
+                  intent: Intent
+              ) {
+
+                  if (
+                      intent.action ==
+                          Intent.ACTION_VIEW
+                      &&
+                      intent.data != null
+                  ) {
+
+                      loadGlb(
+                          intent.data!!
+                      )
+                  }
+              }
+
+
+              private fun loadGlb(
+                  uri: Uri
+              ) {
+
+                  try {
+
+                      statusText.text =
+                          "Reading GLB..."
+
+
+                      val bytes =
+                          contentResolver
+                              .openInputStream(uri)
+                              ?.use {
+                                  it.readBytes()
+                              }
+                              ?: throw IllegalStateException(
+                                  "Unable to open GLB file"
+                              )
+
+
+                      if (bytes.size < 12) {
+                          throw IllegalArgumentException(
+                              "File is too small to be a valid GLB"
+                          )
+                      }
+
+
+                      val magic =
+                          String(
+                              bytes,
+                              0,
+                              4,
+                              Charsets.US_ASCII
+                          )
+
+
+                      if (magic != "glTF") {
+
+                          throw IllegalArgumentException(
+                              "Selected file is not a GLB file"
+                          )
+                      }
+
+
+                      val sizeMb =
+                          bytes.size / 1024 / 1024
+
+
+                      statusText.text =
+                          "Loading ${sizeMb} MB GLB..."
+
+
+                      val buffer =
+                          ByteBuffer.wrap(bytes)
+
+
+                      modelViewer.loadModelGlb(
+                          buffer
+                      )
+
+
+                      modelViewer.transformToUnitCube()
+
+
+                      statusText.text =
+                          "GLB loaded • Rotate / zoom"
+
+
+                  } catch (e: Exception) {
+
+                      statusText.text =
+                          "GLB load failed"
+
+
+                      Toast.makeText(
+                          this,
+                          "Could not load GLB: ${e.message}",
+                          Toast.LENGTH_LONG
+                      ).show()
+                  }
+              }
+
+
+              companion object {
+
+                  private const val REQUEST_GLB =
+                      7001
+              }
+          }
+          EOF
+
+      # ------------------------------------------------------------
+      # 14. Placeholder directories/files
+      # ------------------------------------------------------------
+      - name: Create placeholder files
+        shell: bash
+        run: |
+          touch app/src/main/assets/models/.gitkeep
+          touch app/src/main/assets/sample/.gitkeep
+          touch app/src/main/cpp/.gitkeep
+
+      # ------------------------------------------------------------
+      # 15. Generate Gradle wrapper
+      # ------------------------------------------------------------
+      - name: Generate Gradle wrapper
+        shell: bash
+        run: |
+          set -e
+
+          gradle wrapper --gradle-version 8.9
+
+          chmod +x gradlew
+
+      # ------------------------------------------------------------
+      # 16. Show project tree
+      # ------------------------------------------------------------
+      - name: Show project tree
+        shell: bash
+        run: |
+          find . \
+            -maxdepth 6 \
+            -type f \
+            -not -path "./.git/*" \
+            | sort
+
+      # ------------------------------------------------------------
+      # 17. Build Debug APK
+      # ------------------------------------------------------------
+      - name: Build Debug APK
+        shell: bash
+        run: |
+          set -e
+
+          ./gradlew \
+            :app:assembleDebug \
+            --stacktrace \
+            --no-daemon
+
+      # ------------------------------------------------------------
+      # 18. Check APK
+      # ------------------------------------------------------------
+      - name: Check APK
+        shell: bash
+        run: |
+          set -e
+
+          ls -lh \
+            app/build/outputs/apk/debug/app-debug.apk
+
+      # ------------------------------------------------------------
+      # 19. Upload APK artifact
+      # ------------------------------------------------------------
+      - name: Upload Debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: PIFuHDC-3D-Viewer-debug
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+
+      # ------------------------------------------------------------
+      # 20. Commit Bootstrap 2 project
+      # ------------------------------------------------------------
+      - name: Commit Bootstrap 2 project
+        shell: bash
+        run: |
+          set -e
+
+          git config user.name \
+            "github-actions[bot]"
+
+          git config user.email \
+            "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add .
+
+          if git diff --cached --quiet; then
+              echo "No changes to commit."
+          else
+              git commit \
+                -m "Bootstrap Android GLB viewer"
+              git push
+          fi
