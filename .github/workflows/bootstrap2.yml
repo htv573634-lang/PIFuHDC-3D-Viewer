@@ -2,46 +2,47 @@ name: Bootstrap 2 - PIFuHDC 3D Viewer
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
 
 permissions:
   contents: write
 
 jobs:
   bootstrap2:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
 
     steps:
 
       # ============================================================
-      # 1. CHECKOUT
+      # CHECKOUT
       # ============================================================
       - name: Checkout repository
         uses: actions/checkout@v4
 
-
       # ============================================================
-      # 2. JAVA 17
+      # JAVA 17
       # ============================================================
       - name: Setup Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: "17"
-
+          java-version: '17'
 
       # ============================================================
-      # 3. ANDROID SDK TOOLS
+      # ANDROID SDK
       # ============================================================
       - name: Setup Android SDK
         uses: android-actions/setup-android@v4
         with:
-          packages: ""
-
+          packages: ''
 
       # ============================================================
-      # 4. INSTALL ANDROID 37.0
+      # INSTALL REQUIRED ANDROID SDK PACKAGES
+      # API 37 package is android-37.0
       # ============================================================
-      - name: Install Android SDK 37.0
+      - name: Install Android SDK packages
         shell: bash
         run: |
           set -e
@@ -50,28 +51,13 @@ jobs:
           echo "ANDROID SDK"
           echo "=========================================="
 
-          echo "ANDROID_HOME=${ANDROID_HOME}"
-          echo "ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT}"
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
 
-          echo ""
-          echo "sdkmanager:"
-          command -v sdkmanager
-
+          which sdkmanager
           sdkmanager --version
 
-          echo ""
-          echo "=========================================="
-          echo "AVAILABLE API 37 PACKAGES"
-          echo "=========================================="
-
-          sdkmanager --list \
-            | grep -E "platforms;android-37|build-tools;37|build-tools;36" \
-            | head -50 || true
-
-          echo ""
-          echo "=========================================="
-          echo "INSTALLING"
-          echo "=========================================="
+          yes | sdkmanager --licenses >/dev/null || true
 
           sdkmanager \
             "platform-tools" \
@@ -79,88 +65,54 @@ jobs:
             "build-tools;36.0.0"
 
           echo ""
-          echo "=========================================="
-          echo "VERIFYING"
-          echo "=========================================="
-
-          echo "Installed platforms:"
-
-          ls -la \
-            "${ANDROID_HOME}/platforms"
+          echo "Installed Android platforms:"
+          ls -la "$ANDROID_HOME/platforms"
 
           echo ""
-          echo "Installed build tools:"
+          echo "Checking Android 37:"
+          test -f "$ANDROID_HOME/platforms/android-37.0/android.jar"
 
-          ls -la \
-            "${ANDROID_HOME}/build-tools"
-
-          echo ""
-          echo "Checking Android 37.0..."
-
-          if [ -d "${ANDROID_HOME}/platforms/android-37.0" ]; then
-
-            echo "SUCCESS: Android 37.0 installed."
-
-          else
-
-            echo ""
-            echo "ERROR: Android 37.0 was not installed."
-
-            echo ""
-            echo "Available platform directories:"
-
-            find \
-              "${ANDROID_HOME}/platforms" \
-              -maxdepth 1 \
-              -mindepth 1 \
-              -type d \
-              -print \
-              2>/dev/null || true
-
-            exit 1
-
-          fi
-
+          echo "Android 37.0 SDK OK"
 
       # ============================================================
-      # 5. CHECK GRADLE
+      # FILAMENT 1.77.0
       # ============================================================
-      - name: Check Gradle
+      - name: Download Filament 1.77.0 AARs
         shell: bash
         run: |
           set -e
 
           echo "=========================================="
-          echo "GRADLE"
+          echo "DOWNLOADING FILAMENT 1.77.0"
           echo "=========================================="
 
-          if ! command -v gradle >/dev/null 2>&1; then
+          mkdir -p app/libs
 
-            echo "ERROR: Gradle is not available."
+          curl -L --fail --retry 3 \
+            -o app/libs/filament.aar \
+            https://github.com/google/filament/releases/download/v1.77.0/filament-v1.77.0-android.aar
 
-            exit 1
+          curl -L --fail --retry 3 \
+            -o app/libs/gltfio.aar \
+            https://github.com/google/filament/releases/download/v1.77.0/gltfio-v1.77.0-android.aar
 
-          fi
-
-          echo "Gradle:"
-          command -v gradle
+          curl -L --fail --retry 3 \
+            -o app/libs/filament-utils-api.aar \
+            https://github.com/google/filament/releases/download/v1.77.0/filament-utils-v1.77.0-android.aar
 
           echo ""
-
-          gradle --version
-
+          echo "Filament files:"
+          ls -lh app/libs
 
       # ============================================================
-      # 6. CREATE DIRECTORIES
+      # CREATE PROJECT DIRECTORIES
       # ============================================================
-      - name: Create project directories
+      - name: Create project structure
         shell: bash
         run: |
           set -e
 
           mkdir -p \
-            .github/workflows \
-            app/libs \
             app/src/main/java/com/pifuhdc/viewer \
             app/src/main/res/values \
             app/src/main/assets/models \
@@ -168,57 +120,37 @@ jobs:
             app/src/main/cpp \
             gradle/wrapper
 
-
       # ============================================================
-      # 7. DOWNLOAD FILAMENT 1.77.0
+      # ROOT BUILD FILE
       # ============================================================
-      - name: Download Filament 1.77.0
+      - name: Create root build.gradle.kts
         shell: bash
         run: |
-          set -e
+          cat > build.gradle.kts <<'EOF'
+          buildscript {
+              repositories {
+                  google()
+                  mavenCentral()
+                  gradlePluginPortal()
+              }
 
-          FILAMENT_VERSION="1.77.0"
+              dependencies {
+                  classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:2.4.20")
+              }
+          }
 
-          BASE_URL="https://github.com/google/filament/releases/download/v${FILAMENT_VERSION}"
-
-          echo "=========================================="
-          echo "FILAMENT ${FILAMENT_VERSION}"
-          echo "=========================================="
-
-          wget -q \
-            "${BASE_URL}/filament-v${FILAMENT_VERSION}-android.aar" \
-            -O app/libs/filament.aar
-
-          wget -q \
-            "${BASE_URL}/gltfio-v${FILAMENT_VERSION}-android.aar" \
-            -O app/libs/gltfio.aar
-
-          wget -q \
-            "${BASE_URL}/filament-utils-v${FILAMENT_VERSION}-android.aar" \
-            -O app/libs/filament-utils.aar
-
-          echo ""
-          echo "Filament files:"
-
-          ls -lh app/libs/
-
-          test -s app/libs/filament.aar
-          test -s app/libs/gltfio.aar
-          test -s app/libs/filament-utils.aar
-
-          echo ""
-          echo "SUCCESS: Filament downloaded."
-
+          plugins {
+              id("com.android.application") version "9.3.3" apply false
+          }
+          EOF
 
       # ============================================================
-      # 8. SETTINGS
+      # SETTINGS
       # ============================================================
-      - name: Write settings.gradle.kts
+      - name: Create settings.gradle.kts
         shell: bash
         run: |
           cat > settings.gradle.kts <<'EOF'
-          import org.gradle.api.initialization.resolve.RepositoriesMode
-
           pluginManagement {
               repositories {
                   google()
@@ -228,9 +160,7 @@ jobs:
           }
 
           dependencyResolutionManagement {
-              repositoriesMode.set(
-                  RepositoriesMode.FAIL_ON_PROJECT_REPOS
-              )
+              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
 
               repositories {
                   google()
@@ -243,36 +173,27 @@ jobs:
           include(":app")
           EOF
 
-
       # ============================================================
-      # 9. ROOT BUILD
+      # GRADLE PROPERTIES
       # ============================================================
-      - name: Write root build.gradle.kts
-        shell: bash
-        run: |
-          cat > build.gradle.kts <<'EOF'
-          plugins {
-              id("com.android.application") version "9.3.3" apply false
-          }
-          EOF
-
-
-      # ============================================================
-      # 10. GRADLE PROPERTIES
-      # ============================================================
-      - name: Write gradle.properties
+      - name: Create gradle.properties
         shell: bash
         run: |
           cat > gradle.properties <<'EOF'
-          org.gradle.jvmargs=-Xmx3g -Dfile.encoding=UTF-8
+          org.gradle.jvmargs=-Xmx4096m -Dfile.encoding=UTF-8
+          org.gradle.parallel=true
+          org.gradle.caching=true
           android.useAndroidX=true
+          android.nonTransitiveRClass=true
           EOF
 
-
       # ============================================================
-      # 11. APP BUILD
+      # APP BUILD FILE
+      #
+      # IMPORTANT:
+      # No MainActivity is created by this bootstrap.
       # ============================================================
-      - name: Write app/build.gradle.kts
+      - name: Create app/build.gradle.kts
         shell: bash
         run: |
           cat > app/build.gradle.kts <<'EOF'
@@ -281,98 +202,79 @@ jobs:
           }
 
           android {
-
               namespace = "com.pifuhdc.viewer"
 
-              /*
-               * Android 37 is published as API 37.0.
-               *
-               * AGP 9.3 supports API 37 and supports
-               * minor API versions.
-               */
               compileSdk = 37
-
               compileSdkMinor = 0
 
               defaultConfig {
-
-                  applicationId =
-                      "com.pifuhdc.viewer"
+                  applicationId = "com.pifuhdc.viewer"
 
                   minSdk = 26
-
                   targetSdk = 37
 
                   versionCode = 3
-
                   versionName = "0.3.0"
               }
 
               buildTypes {
-
                   release {
-
                       isMinifyEnabled = false
+                      isShrinkResources = false
+                  }
 
-                      proguardFiles(
-                          getDefaultProguardFile(
-                              "proguard-android-optimize.txt"
-                          ),
-                          "proguard-rules.pro"
-                      )
+                  debug {
+                      isMinifyEnabled = false
                   }
               }
 
               compileOptions {
-
-                  sourceCompatibility =
-                      JavaVersion.VERSION_17
-
-                  targetCompatibility =
-                      JavaVersion.VERSION_17
+                  sourceCompatibility = JavaVersion.VERSION_17
+                  targetCompatibility = JavaVersion.VERSION_17
               }
 
               packaging {
+                  jniLibs {
+                      useLegacyPackaging = true
+                  }
 
-                  resources.excludes +=
-                      "/META-INF/{AL2.0,LGPL2.1}"
+                  resources {
+                      excludes += setOf(
+                          "META-INF/AL2.0",
+                          "META-INF/LGPL2.1",
+                          "META-INF/*.version"
+                      )
+                  }
               }
           }
 
+          kotlin {
+              jvmToolchain(17)
+          }
+
           dependencies {
-
-              implementation(
-                  files(
-                      "libs/filament.aar"
-                  )
-              )
-
-              implementation(
-                  files(
-                      "libs/gltfio.aar"
-                  )
-              )
-
-              implementation(
-                  files(
-                      "libs/filament-utils.aar"
-                  )
-              )
+              implementation(files("libs/filament.aar"))
+              implementation(files("libs/gltfio.aar"))
+              implementation(files("libs/filament-utils-api.aar"))
           }
           EOF
 
-
       # ============================================================
-      # 12. MANIFEST
+      # MANIFEST
+      #
+      # MainActivity is declared for the final viewer, but this
+      # bootstrap deliberately does NOT create MainActivity.kt.
       # ============================================================
-      - name: Write AndroidManifest.xml
+      - name: Create AndroidManifest.xml
         shell: bash
         run: |
           cat > app/src/main/AndroidManifest.xml <<'EOF'
           <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-          <manifest
-              xmlns:android="http://schemas.android.com/apk/res/android">
+              <uses-feature
+                  android:name="android.hardware.opengles.aep"
+                  android:required="false" />
 
               <application
                   android:allowBackup="true"
@@ -382,36 +284,21 @@ jobs:
 
                   <activity
                       android:name=".MainActivity"
-                      android:screenOrientation="portrait"
                       android:exported="true">
 
                       <intent-filter>
-
-                          <action
-                              android:name="android.intent.action.MAIN" />
-
-                          <category
-                              android:name="android.intent.category.LAUNCHER" />
-
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LAUNCHER" />
                       </intent-filter>
 
                       <intent-filter>
+                          <action android:name="android.intent.action.VIEW" />
 
-                          <action
-                              android:name="android.intent.action.VIEW" />
+                          <category android:name="android.intent.category.DEFAULT" />
+                          <category android:name="android.intent.category.BROWSABLE" />
 
-                          <category
-                              android:name="android.intent.category.DEFAULT" />
-
-                          <category
-                              android:name="android.intent.category.BROWSABLE" />
-
-                          <data
-                              android:mimeType="model/gltf-binary" />
-
-                          <data
-                              android:mimeType="application/octet-stream" />
-
+                          <data android:mimeType="model/gltf-binary" />
+                          <data android:mimeType="application/octet-stream" />
                       </intent-filter>
 
                   </activity>
@@ -421,621 +308,211 @@ jobs:
           </manifest>
           EOF
 
-
       # ============================================================
-      # 13. STRINGS
+      # STRINGS
       # ============================================================
-      - name: Write strings.xml
+      - name: Create strings.xml
         shell: bash
         run: |
           cat > app/src/main/res/values/strings.xml <<'EOF'
           <?xml version="1.0" encoding="utf-8"?>
-
           <resources>
-
-              <string name="app_name">
-                  PIFuHDC 3D Viewer
-              </string>
-
+              <string name="app_name">PIFuHDC 3D Viewer</string>
           </resources>
           EOF
 
-
       # ============================================================
-      # 14. STYLES
+      # STYLES
       # ============================================================
-      - name: Write styles.xml
+      - name: Create styles.xml
         shell: bash
         run: |
           cat > app/src/main/res/values/styles.xml <<'EOF'
           <?xml version="1.0" encoding="utf-8"?>
-
           <resources>
 
               <style
                   name="AppTheme"
                   parent="android:style/Theme.Material.Light.NoActionBar">
 
-                  <item name="android:fontFamily">
-                      sans
-                  </item>
-
-                  <item name="android:statusBarColor">
-                      #000000
-                  </item>
-
-                  <item name="android:navigationBarColor">
-                      #000000
-                  </item>
-
-                  <item name="android:windowLightStatusBar">
-                      false
-                  </item>
+                  <item name="android:fontFamily">sans</item>
+                  <item name="android:windowActionModeOverlay">true</item>
+                  <item name="android:colorAccent">#666666</item>
 
               </style>
 
           </resources>
           EOF
 
-
       # ============================================================
-      # 15. PROGUARD
+      # IMPORTANT:
+      # NO MainActivity.kt HERE
       # ============================================================
-      - name: Write proguard-rules.pro
+      - name: Verify MainActivity is intentionally absent
         shell: bash
         run: |
-          cat > app/proguard-rules.pro <<'EOF'
-          # PIFuHDC 3D Viewer
-          EOF
+          set -e
 
+          if [ -f app/src/main/java/com/pifuhdc/viewer/MainActivity.kt ]; then
+            echo "ERROR: MainActivity.kt exists."
+            echo "Bootstrap 2 must not create MainActivity.kt."
+            exit 1
+          fi
+
+          echo "MainActivity.kt is intentionally absent."
 
       # ============================================================
-      # 16. MAIN ACTIVITY
-      # ============================================================
-      - name: Write MainActivity.kt
-        shell: bash
-        run: |
-          cat > app/src/main/java/com/pifuhdc/viewer/MainActivity.kt <<'EOF'
-          package com.pifuhdc.viewer
-
-          import android.app.Activity
-          import android.content.Intent
-          import android.net.Uri
-          import android.os.Bundle
-          import android.view.Choreographer
-          import android.view.TextureView
-          import android.widget.Button
-          import android.widget.LinearLayout
-          import android.widget.TextView
-          import android.widget.Toast
-
-          import com.google.android.filament.utils.ModelViewer
-
-          import java.nio.ByteBuffer
-
-
-          class MainActivity : Activity() {
-
-              private lateinit var modelViewer: ModelViewer
-
-              private lateinit var statusText: TextView
-
-              private val choreographer =
-                  Choreographer.getInstance()
-
-
-              private val frameCallback =
-                  object : Choreographer.FrameCallback {
-
-                      override fun doFrame(
-                          frameTimeNanos: Long
-                      ) {
-
-                          if (::modelViewer.isInitialized) {
-
-                              modelViewer.render(
-                                  frameTimeNanos
-                              )
-                          }
-
-                          choreographer.postFrameCallback(
-                              this
-                          )
-                      }
-                  }
-
-
-              override fun onCreate(
-                  savedInstanceState: Bundle?
-              ) {
-
-                  super.onCreate(
-                      savedInstanceState
-                  )
-
-                  createViewerUi()
-
-                  handleIntent(intent)
-              }
-
-
-              private fun createViewerUi() {
-
-                  val root =
-                      LinearLayout(this).apply {
-
-                          orientation =
-                              LinearLayout.VERTICAL
-                      }
-
-
-                  val controls =
-                      LinearLayout(this).apply {
-
-                          orientation =
-                              LinearLayout.HORIZONTAL
-
-                          setPadding(
-                              16,
-                              12,
-                              16,
-                              12
-                          )
-                      }
-
-
-                  val openButton =
-                      Button(this).apply {
-
-                          text = "Open GLB"
-
-                          setOnClickListener {
-                              openGlbPicker()
-                          }
-                      }
-
-
-                  statusText =
-                      TextView(this).apply {
-
-                          text =
-                              "No GLB model loaded"
-
-                          setPadding(
-                              16,
-                              0,
-                              8,
-                              0
-                          )
-                      }
-
-
-                  controls.addView(
-                      openButton,
-                      LinearLayout.LayoutParams(
-                          0,
-                          LinearLayout.LayoutParams.WRAP_CONTENT,
-                          1f
-                      )
-                  )
-
-
-                  controls.addView(
-                      statusText,
-                      LinearLayout.LayoutParams(
-                          0,
-                          LinearLayout.LayoutParams.WRAP_CONTENT,
-                          2f
-                      )
-                  )
-
-
-                  val textureView =
-                      TextureView(this)
-
-
-                  modelViewer =
-                      ModelViewer(
-                          textureView
-                      )
-
-
-                  textureView.setOnTouchListener(
-                      modelViewer
-                  )
-
-
-                  root.addView(
-                      controls,
-                      LinearLayout.LayoutParams(
-                          LinearLayout.LayoutParams.MATCH_PARENT,
-                          LinearLayout.LayoutParams.WRAP_CONTENT
-                      )
-                  )
-
-
-                  root.addView(
-                      textureView,
-                      LinearLayout.LayoutParams(
-                          LinearLayout.LayoutParams.MATCH_PARENT,
-                          0,
-                          1f
-                      )
-                  )
-
-
-                  setContentView(root)
-              }
-
-
-              override fun onResume() {
-
-                  super.onResume()
-
-                  choreographer.postFrameCallback(
-                      frameCallback
-                  )
-              }
-
-
-              override fun onPause() {
-
-                  choreographer.removeFrameCallback(
-                      frameCallback
-                  )
-
-                  super.onPause()
-              }
-
-
-              override fun onDestroy() {
-
-                  choreographer.removeFrameCallback(
-                      frameCallback
-                  )
-
-                  if (::modelViewer.isInitialized) {
-                      modelViewer.destroy()
-                  }
-
-                  super.onDestroy()
-              }
-
-
-              override fun onNewIntent(
-                  intent: Intent?
-              ) {
-
-                  super.onNewIntent(intent)
-
-                  if (intent != null) {
-
-                      setIntent(intent)
-
-                      handleIntent(intent)
-                  }
-              }
-
-
-              private fun openGlbPicker() {
-
-                  val intent =
-                      Intent(
-                          Intent.ACTION_OPEN_DOCUMENT
-                      ).apply {
-
-                          addCategory(
-                              Intent.CATEGORY_OPENABLE
-                          )
-
-                          type = "*/*"
-
-                          putExtra(
-                              Intent.EXTRA_MIME_TYPES,
-                              arrayOf(
-                                  "model/gltf-binary",
-                                  "application/octet-stream"
-                              )
-                          )
-                      }
-
-
-                  startActivityForResult(
-                      intent,
-                      REQUEST_GLB
-                  )
-              }
-
-
-              @Deprecated("Bootstrap 2")
-              override fun onActivityResult(
-                  requestCode: Int,
-                  resultCode: Int,
-                  data: Intent?
-              ) {
-
-                  super.onActivityResult(
-                      requestCode,
-                      resultCode,
-                      data
-                  )
-
-
-                  if (
-                      requestCode ==
-                          REQUEST_GLB
-                      &&
-                      resultCode ==
-                          RESULT_OK
-                  ) {
-
-                      data?.data?.let {
-                          loadGlb(it)
-                      }
-                  }
-              }
-
-
-              private fun handleIntent(
-                  intent: Intent
-              ) {
-
-                  if (
-                      intent.action ==
-                          Intent.ACTION_VIEW
-                      &&
-                      intent.data != null
-                  ) {
-
-                      loadGlb(
-                          intent.data!!
-                      )
-                  }
-              }
-
-
-              private fun loadGlb(
-                  uri: Uri
-              ) {
-
-                  try {
-
-                      statusText.text =
-                          "Reading GLB..."
-
-
-                      val bytes =
-                          contentResolver
-                              .openInputStream(uri)
-                              ?.use {
-                                  it.readBytes()
-                              }
-                              ?: throw IllegalStateException(
-                                  "Unable to open GLB"
-                              )
-
-
-                      if (bytes.size < 12) {
-
-                          throw IllegalArgumentException(
-                              "File too small"
-                          )
-                      }
-
-
-                      val magic =
-                          String(
-                              bytes,
-                              0,
-                              4,
-                              Charsets.US_ASCII
-                          )
-
-
-                      if (magic != "glTF") {
-
-                          throw IllegalArgumentException(
-                              "Not a valid GLB file"
-                          )
-                      }
-
-
-                      val sizeMb =
-                          bytes.size / 1024 / 1024
-
-
-                      statusText.text =
-                          "Loading ${sizeMb} MB GLB..."
-
-
-                      modelViewer.loadModelGlb(
-                          ByteBuffer.wrap(bytes)
-                      )
-
-
-                      modelViewer.transformToUnitCube()
-
-
-                      statusText.text =
-                          "GLB loaded • Rotate / zoom"
-
-
-                  } catch (e: Exception) {
-
-                      statusText.text =
-                          "GLB load failed"
-
-
-                      Toast.makeText(
-                          this,
-                          "Could not load GLB: ${e.message}",
-                          Toast.LENGTH_LONG
-                      ).show()
-                  }
-              }
-
-
-              companion object {
-
-                  private const val REQUEST_GLB =
-                      7001
-              }
-          }
-          EOF
-
-
-      # ============================================================
-      # 17. PLACEHOLDER FILES
-      # ============================================================
-      - name: Create placeholder files
-        shell: bash
-        run: |
-          touch app/src/main/assets/models/.gitkeep
-          touch app/src/main/assets/sample/.gitkeep
-          touch app/src/main/cpp/.gitkeep
-
-
-      # ============================================================
-      # 18. GENERATE GRADLE WRAPPER
+      # GENERATE GRADLE WRAPPER
       # ============================================================
       - name: Generate Gradle wrapper
         shell: bash
         run: |
           set -e
 
+          echo "=========================================="
+          echo "GENERATING GRADLE WRAPPER"
+          echo "=========================================="
+
+          gradle --version
+
           gradle wrapper \
-            --gradle-version 9.5
+            --gradle-version 9.5.1 \
+            --distribution-type bin
 
           chmod +x gradlew
 
-          echo ""
-          echo "Gradle wrapper:"
           ./gradlew --version
 
-
       # ============================================================
-      # 19. VERIFY SDK + PROJECT
+      # VERIFY PROJECT FILES
       # ============================================================
-      - name: Verify Android project
+      - name: Verify project
         shell: bash
         run: |
           set -e
 
           echo "=========================================="
-          echo "FINAL SDK CHECK"
+          echo "PROJECT TREE"
           echo "=========================================="
 
-          test -f \
-            "${ANDROID_HOME}/platforms/android-37.0/android.jar"
-
-          test -d \
-            "${ANDROID_HOME}/build-tools/36.0.0"
-
-          echo "android.jar:"
-          ls -lh \
-            "${ANDROID_HOME}/platforms/android-37.0/android.jar"
+          find . \
+            -maxdepth 5 \
+            -type f \
+            ! -path "./.git/*" \
+            | sort
 
           echo ""
-          echo "Build tools:"
-          ls -ld \
-            "${ANDROID_HOME}/build-tools/36.0.0"
+          echo "Checking critical files..."
+
+          test -f settings.gradle.kts
+          test -f build.gradle.kts
+          test -f gradle.properties
+          test -f app/build.gradle.kts
+          test -f app/src/main/AndroidManifest.xml
+          test -f app/src/main/res/values/strings.xml
+          test -f app/src/main/res/values/styles.xml
+
+          test -f app/libs/filament.aar
+          test -f app/libs/gltfio.aar
+          test -f app/libs/filament-utils-api.aar
+
+          test ! -f app/src/main/java/com/pifuhdc/viewer/MainActivity.kt
 
           echo ""
-          echo "Filament:"
-          ls -lh app/libs/
-
-          echo ""
-          echo "Project verification passed."
-
+          echo "All bootstrap files verified."
 
       # ============================================================
-      # 20. CLEAN
+      # CLEAN
       # ============================================================
-      - name: Clean project
+      - name: Clean Gradle project
         shell: bash
         run: |
           set -e
-
-          ./gradlew \
-            clean \
-            --stacktrace \
-            --no-daemon
-
+          ./gradlew clean --no-daemon
 
       # ============================================================
-      # 21. BUILD DEBUG APK
+      # BUILD DEBUG APK
+      #
+      # There is intentionally no Kotlin source yet.
+      # This tests the complete Gradle + AGP + SDK + Filament
+      # configuration independently from MainActivity.
       # ============================================================
-      - name: Build Debug APK
+      - name: Build debug APK
         shell: bash
         run: |
           set -e
 
           echo "=========================================="
           echo "BUILDING PIFuHDC 3D VIEWER"
+          echo "WITHOUT MAINACTIVITY"
           echo "=========================================="
 
           ./gradlew \
             :app:assembleDebug \
-            --stacktrace \
-            --no-daemon
-
+            --no-daemon \
+            --stacktrace
 
       # ============================================================
-      # 22. VERIFY APK
+      # VERIFY APK
       # ============================================================
       - name: Verify APK
         shell: bash
         run: |
           set -e
 
-          APK="app/build/outputs/apk/debug/app-debug.apk"
+          echo "=========================================="
+          echo "APK RESULT"
+          echo "=========================================="
 
-          test -f "$APK"
+          find app/build/outputs/apk \
+            -type f \
+            -name "*.apk" \
+            -print
+
+          APK=$(find app/build/outputs/apk \
+            -type f \
+            -name "*.apk" \
+            | head -n 1)
+
+          if [ -z "$APK" ]; then
+            echo "ERROR: APK was not generated."
+            exit 1
+          fi
 
           echo ""
-          echo "=========================================="
-          echo "APK BUILD SUCCESS"
-          echo "=========================================="
+          echo "APK:"
+          echo "$APK"
 
+          echo ""
+          echo "APK size:"
           ls -lh "$APK"
 
-
       # ============================================================
-      # 23. UPLOAD APK
+      # UPLOAD APK
       # ============================================================
-      - name: Upload Debug APK
+      - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
-          name: PIFuHDC-3D-Viewer-debug
-          path: app/build/outputs/apk/debug/app-debug.apk
+          name: PIFuHDC-3D-Viewer-debug-bootstrap
+          path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
 
-
       # ============================================================
-      # 24. COMMIT
+      # COMMIT GENERATED PROJECT
       # ============================================================
       - name: Commit generated project
         shell: bash
         run: |
           set -e
 
-          git config user.name \
-            "github-actions[bot]"
-
-          git config user.email \
-            "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
           git add .
 
           if git diff --cached --quiet; then
-
-              echo "No changes to commit."
-
+            echo "No changes to commit."
           else
-
-              git commit \
-                -m "Bootstrap Android GLB viewer"
-
-              git push
-
+            git commit -m "Bootstrap 2: Android GLB viewer project without MainActivity"
+            git push
           fi
