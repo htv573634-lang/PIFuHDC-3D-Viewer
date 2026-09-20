@@ -2,6 +2,7 @@ package com.pifuhdc.viewer
 
 import android.app.Activity
 import android.content.Intent
+import android.graphics.Bitmap
 import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
@@ -37,6 +38,16 @@ class MainActivity : Activity() {
     private var renderingStarted = false
     private var lightEntity = 0
 
+    /*
+     * Diagnostic state.
+     */
+    private var renderFrameCount = 0L
+    private var successfulRenderCount = 0L
+    private var frameCaptureRequested = false
+    private var diagnosticCompleted = false
+    private var modelReadyLogged = false
+    private var lastProgressLogged = -1f
+
     private val choreographer =
         Choreographer.getInstance()
 
@@ -55,11 +66,130 @@ class MainActivity : Activity() {
 
                 if (::modelViewer.isInitialized) {
 
+                    renderFrameCount++
+
                     try {
 
-                        modelViewer.render(
-                            frameTimeNanos
-                        )
+                        val rendered =
+                            modelViewer.render(
+                                frameTimeNanos
+                            )
+
+                        if (rendered) {
+                            successfulRenderCount++
+                        }
+
+                        /*
+                         * Log the first few frames so we know whether
+                         * ModelViewer is actually getting a render surface.
+                         */
+                        if (
+                            renderFrameCount <= 10L ||
+                            renderFrameCount % 120L == 0L
+                        ) {
+
+                            Log.d(
+                                TAG,
+                                "FRAME #$renderFrameCount " +
+                                    "rendered=$rendered " +
+                                    "progress=${modelViewer.progress} " +
+                                    "successful=$successfulRenderCount"
+                            )
+                        }
+
+                        /*
+                         * Track resource loading progress.
+                         */
+                        val progress =
+                            modelViewer.progress
+
+                        if (
+                            progress != lastProgressLogged &&
+                            (
+                                progress == 0.0f ||
+                                progress >= 1.0f ||
+                                progress - lastProgressLogged >= 0.1f
+                            )
+                        ) {
+
+                            lastProgressLogged =
+                                progress
+
+                            Log.d(
+                                TAG,
+                                "RESOURCE PROGRESS = $progress"
+                            )
+                        }
+
+                        /*
+                         * Once Filament reports that resources are
+                         * completely loaded, inspect the scene and request
+                         * one actual rendered frame capture.
+                         */
+                        if (
+                            progress >= 1.0f &&
+                            !modelReadyLogged
+                        ) {
+
+                            modelReadyLogged = true
+
+                            Log.d(
+                                TAG,
+                                "================================"
+                            )
+
+                            Log.d(
+                                TAG,
+                                "RESOURCES FULLY LOADED"
+                            )
+
+                            Log.d(
+                                TAG,
+                                "Progress = $progress"
+                            )
+
+                            Log.d(
+                                TAG,
+                                "Render frames = $renderFrameCount"
+                            )
+
+                            Log.d(
+                                TAG,
+                                "Successful renders = $successfulRenderCount"
+                            )
+
+                            Log.d(
+                                TAG,
+                                "TextureView = " +
+                                    "${textureView.width} x " +
+                                    "${textureView.height}"
+                            )
+
+                            Log.d(
+                                TAG,
+                                "================================"
+                            )
+
+                            statusText.text =
+                                "Resources loaded • capturing frame..."
+
+                            /*
+                             * Important:
+                             * debugGetNextFrameCallback captures the
+                             * NEXT rendered frame. We request it here,
+                             * after the current render call.
+                             */
+                            requestFrameCapture()
+
+                            /*
+                             * Inspect scene/camera after the asynchronous
+                             * resources have actually finished loading.
+                             */
+                            textureView.post {
+
+                                inspectModel()
+                            }
+                        }
 
                     } catch (e: Exception) {
 
@@ -228,6 +358,13 @@ class MainActivity : Activity() {
 
         textureView.post {
 
+            Log.d(
+                TAG,
+                "TextureView.post: size=" +
+                    "${textureView.width} x " +
+                    "${textureView.height}"
+            )
+
             initializeViewer()
         }
     }
@@ -241,6 +378,18 @@ class MainActivity : Activity() {
     private fun initializeViewer() {
 
         try {
+
+            Log.d(
+                TAG,
+                "Creating ModelViewer..."
+            )
+
+            Log.d(
+                TAG,
+                "TextureView dimensions before ModelViewer = " +
+                    "${textureView.width} x " +
+                    "${textureView.height}"
+            )
 
             modelViewer =
                 ModelViewer(
@@ -263,6 +412,13 @@ class MainActivity : Activity() {
             Log.d(
                 TAG,
                 "ModelViewer initialized"
+            )
+
+            Log.d(
+                TAG,
+                "ModelViewer view viewport = " +
+                    "${modelViewer.view.viewport.width} x " +
+                    "${modelViewer.view.viewport.height}"
             )
 
             handleIntent(intent)
@@ -468,6 +624,319 @@ class MainActivity : Activity() {
 
     /*
      * ------------------------------------------------
+     * RENDER OUTPUT CAPTURE
+     * ------------------------------------------------
+     */
+
+    private fun requestFrameCapture() {
+
+        if (frameCaptureRequested) {
+            return
+        }
+
+        frameCaptureRequested = true
+
+        Log.d(
+            TAG,
+            "Requesting next rendered frame capture..."
+        )
+
+        try {
+
+            modelViewer.debugGetNextFrameCallback {
+
+                bitmap ->
+
+                try {
+
+                    analyzeRenderedBitmap(
+                        bitmap
+                    )
+
+                } catch (e: Exception) {
+
+                    Log.e(
+                        TAG,
+                        "Frame bitmap analysis failed",
+                        e
+                    )
+
+                    statusText.text =
+                        "Frame capture analysis failed"
+                }
+            }
+
+        } catch (e: Exception) {
+
+            frameCaptureRequested = false
+
+            Log.e(
+                TAG,
+                "debugGetNextFrameCallback failed",
+                e
+            )
+
+            statusText.text =
+                "Frame capture API failed"
+        }
+    }
+
+    private fun analyzeRenderedBitmap(
+        bitmap: Bitmap
+    ) {
+
+        val width =
+            bitmap.width
+
+        val height =
+            bitmap.height
+
+        if (
+            width <= 0 ||
+            height <= 0
+        ) {
+
+            Log.e(
+                TAG,
+                "FRAME RESULT: invalid bitmap " +
+                    "${width}x${height}"
+            )
+
+            statusText.text =
+                "FRAME INVALID"
+
+            return
+        }
+
+        val pixels =
+            IntArray(
+                width * height
+            )
+
+        bitmap.getPixels(
+            pixels,
+            0,
+            width,
+            0,
+            0,
+            width,
+            height
+        )
+
+        var nonBlackPixels = 0L
+        var brightPixels = 0L
+        var totalBrightness = 0L
+
+        var minBrightness =
+            255
+
+        var maxBrightness =
+            0
+
+        for (pixel in pixels) {
+
+            val red =
+                (pixel shr 16) and 0xff
+
+            val green =
+                (pixel shr 8) and 0xff
+
+            val blue =
+                pixel and 0xff
+
+            val brightness =
+                (red + green + blue) / 3
+
+            totalBrightness +=
+                brightness.toLong()
+
+            if (brightness > 3) {
+
+                nonBlackPixels++
+            }
+
+            if (brightness > 30) {
+
+                brightPixels++
+            }
+
+            if (
+                brightness <
+                    minBrightness
+            ) {
+
+                minBrightness =
+                    brightness
+            }
+
+            if (
+                brightness >
+                    maxBrightness
+            ) {
+
+                maxBrightness =
+                    brightness
+            }
+        }
+
+        val pixelCount =
+            pixels.size.toLong()
+
+        val averageBrightness =
+            if (pixelCount > 0) {
+                totalBrightness.toDouble() /
+                    pixelCount.toDouble()
+            } else {
+                0.0
+            }
+
+        val nonBlackPercent =
+            if (pixelCount > 0) {
+                nonBlackPixels.toDouble() *
+                    100.0 /
+                    pixelCount.toDouble()
+            } else {
+                0.0
+            }
+
+        val brightPercent =
+            if (pixelCount > 0) {
+                brightPixels.toDouble() *
+                    100.0 /
+                    pixelCount.toDouble()
+            } else {
+                0.0
+            }
+
+        val centerX =
+            width / 2
+
+        val centerY =
+            height / 2
+
+        val centerPixel =
+            bitmap.getPixel(
+                centerX,
+                centerY
+            )
+
+        val centerRed =
+            (centerPixel shr 16) and 0xff
+
+        val centerGreen =
+            (centerPixel shr 8) and 0xff
+
+        val centerBlue =
+            centerPixel and 0xff
+
+        Log.d(
+            TAG,
+            "================================"
+        )
+
+        Log.d(
+            TAG,
+            "RENDER OUTPUT DIAGNOSTIC"
+        )
+
+        Log.d(
+            TAG,
+            "Bitmap = ${width} x ${height}"
+        )
+
+        Log.d(
+            TAG,
+            "Average brightness = $averageBrightness"
+        )
+
+        Log.d(
+            TAG,
+            "Min brightness = $minBrightness"
+        )
+
+        Log.d(
+            TAG,
+            "Max brightness = $maxBrightness"
+        )
+
+        Log.d(
+            TAG,
+            "Non-black pixels = " +
+                "$nonBlackPixels / $pixelCount " +
+                "($nonBlackPercent%)"
+        )
+
+        Log.d(
+            TAG,
+            "Bright pixels = " +
+                "$brightPixels / $pixelCount " +
+                "($brightPercent%)"
+        )
+
+        Log.d(
+            TAG,
+            "Center pixel RGB = " +
+                "($centerRed, $centerGreen, $centerBlue)"
+        )
+
+        Log.d(
+            TAG,
+            "Successful renders = " +
+                successfulRenderCount
+        )
+
+        Log.d(
+            TAG,
+            "================================"
+        )
+
+        /*
+         * We deliberately do NOT declare the model visible or invisible
+         * based only on one threshold. The purpose of this diagnostic is
+         * to tell us what Filament actually produced.
+         */
+
+        if (
+            averageBrightness < 1.0 &&
+            nonBlackPixels == 0L
+        ) {
+
+            statusText.text =
+                "FRAME BLACK • check renderer/camera"
+
+            Log.e(
+                TAG,
+                "FRAME RESULT = COMPLETELY BLACK"
+            )
+
+        } else if (
+            nonBlackPercent > 1.0
+        ) {
+
+            statusText.text =
+                "FRAME HAS PIXELS • inspect display/model"
+
+            Log.d(
+                TAG,
+                "FRAME RESULT = NON-BLACK CONTENT EXISTS"
+            )
+
+        } else {
+
+            statusText.text =
+                "FRAME VERY DARK • inspect model/material"
+
+            Log.w(
+                TAG,
+                "FRAME RESULT = VERY DARK / FEW NON-BLACK PIXELS"
+            )
+        }
+
+        diagnosticCompleted = true
+    }
+
+    /*
+     * ------------------------------------------------
      * RENDER LOOP
      * ------------------------------------------------
      */
@@ -659,6 +1128,16 @@ class MainActivity : Activity() {
 
         try {
 
+            /*
+             * Reset diagnostic state for the new model.
+             */
+            frameCaptureRequested = false
+            diagnosticCompleted = false
+            modelReadyLogged = false
+            renderFrameCount = 0L
+            successfulRenderCount = 0L
+            lastProgressLogged = -1f
+
             statusText.text =
                 "Reading GLB..."
 
@@ -772,20 +1251,24 @@ class MainActivity : Activity() {
                 glbBuffer
             )
 
-            /*
-             * IMPORTANT:
-             *
-             * Immediately scale and center the
-             * loaded model.
-             */
+            Log.d(
+                TAG,
+                "loadModelGlb() completed"
+            )
 
+            /*
+             * Scale and center the model.
+             *
+             * This is the same official ModelViewer operation used
+             * by Filament's validation/sample flow.
+             */
             try {
 
                 modelViewer.transformToUnitCube()
 
                 Log.d(
                     TAG,
-                    "transformToUnitCube applied immediately"
+                    "transformToUnitCube applied"
                 )
 
             } catch (e: Exception) {
@@ -800,26 +1283,15 @@ class MainActivity : Activity() {
             startRendering()
 
             statusText.text =
-                "GLB loaded - preparing view..."
-
-            Log.d(
-                TAG,
-                "loadModelGlb() completed"
-            )
+                "GLB loading resources..."
 
             /*
-             * Give Filament time to complete
-             * asynchronous resource loading.
+             * IMPORTANT:
+             *
+             * We intentionally removed the old fixed 1500 ms timer.
+             * Filament loads resources asynchronously, so the diagnostic
+             * now waits for modelViewer.progress >= 1.0.
              */
-
-            textureView.postDelayed(
-                {
-
-                    inspectModel()
-
-                },
-                1500L
-            )
 
         } catch (e: Exception) {
 
@@ -905,9 +1377,31 @@ class MainActivity : Activity() {
 
         Log.d(
             TAG,
+            "Asset entities = ${asset.entities.size}"
+        )
+
+        Log.d(
+            TAG,
+            "Asset lights = ${asset.lightEntities.size}"
+        )
+
+        Log.d(
+            TAG,
+            "ModelViewer progress = ${modelViewer.progress}"
+        )
+
+        Log.d(
+            TAG,
             "TextureView size = " +
                 "${textureView.width} x " +
                 "${textureView.height}"
+        )
+
+        Log.d(
+            TAG,
+            "ModelViewer viewport = " +
+                "${modelViewer.view.viewport.width} x " +
+                "${modelViewer.view.viewport.height}"
         )
 
         Log.d(
@@ -945,6 +1439,42 @@ class MainActivity : Activity() {
                     TAG,
                     "Entity=$entity primitives=$primitiveCount"
                 )
+
+                /*
+                 * Log material information where possible.
+                 */
+                for (
+                    primitiveIndex in
+                        0 until primitiveCount
+                ) {
+
+                    try {
+
+                        val materialInstance =
+                            renderableManager
+                                .getMaterialInstanceAt(
+                                    instance,
+                                    primitiveIndex
+                                )
+
+                        Log.d(
+                            TAG,
+                            "Entity=$entity " +
+                                "primitive=$primitiveIndex " +
+                                "material=$materialInstance"
+                        )
+
+                    } catch (e: Exception) {
+
+                        Log.w(
+                            TAG,
+                            "Material diagnostic failed " +
+                                "entity=$entity " +
+                                "primitive=$primitiveIndex",
+                            e
+                        )
+                    }
+                }
 
             } catch (e: Exception) {
 
@@ -994,6 +1524,16 @@ class MainActivity : Activity() {
                 "Camera projection matrix read"
             )
 
+            Log.d(
+                TAG,
+                "Projection[0] = ${projection[0]}"
+            )
+
+            Log.d(
+                TAG,
+                "Projection[5] = ${projection[5]}"
+            )
+
         } catch (e: Exception) {
 
             Log.e(
@@ -1005,7 +1545,7 @@ class MainActivity : Activity() {
 
         /*
          * ------------------------------------------------
-         * FINAL DIAGNOSTIC RESULT
+         * FINAL SCENE RESULT
          * ------------------------------------------------
          */
 
@@ -1013,9 +1553,6 @@ class MainActivity : Activity() {
             renderableCount > 0 &&
             sceneRenderableCount > 0
         ) {
-
-            statusText.text =
-                "RENDERABLES $renderableCount • SCENE $sceneRenderableCount"
 
             Log.d(
                 TAG,
@@ -1026,9 +1563,6 @@ class MainActivity : Activity() {
             renderableCount > 0
         ) {
 
-            statusText.text =
-                "ASSET $renderableCount • SCENE 0"
-
             Log.e(
                 TAG,
                 "RESULT = ASSET HAS RENDERABLES BUT SCENE IS EMPTY"
@@ -1036,13 +1570,36 @@ class MainActivity : Activity() {
 
         } else {
 
-            statusText.text =
-                "NO RENDERABLES"
-
             Log.e(
                 TAG,
                 "RESULT = NO RENDERABLE ENTITIES"
             )
+        }
+
+        /*
+         * Don't overwrite the more useful frame-output status if the
+         * frame diagnostic already completed.
+         */
+        if (!diagnosticCompleted) {
+
+            statusText.text =
+                if (
+                    renderableCount > 0 &&
+                    sceneRenderableCount > 0
+                ) {
+
+                    "RENDERABLES $renderableCount • SCENE $sceneRenderableCount"
+
+                } else if (
+                    renderableCount > 0
+                ) {
+
+                    "ASSET $renderableCount • SCENE 0"
+
+                } else {
+
+                    "NO RENDERABLES"
+                }
         }
 
         startRendering()
