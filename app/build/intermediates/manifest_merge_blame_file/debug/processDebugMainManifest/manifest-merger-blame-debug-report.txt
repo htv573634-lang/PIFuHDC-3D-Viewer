@@ -1,0 +1,76 @@
+1<?xml version="1.0" encoding="utf-8"?>
+2<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+3    package="com.pifuhdc.viewer"
+4    android:versionCode="3"
+5    android:versionName="0.3.0" >
+6
+7    <uses-sdk
+7-->INJECTED
+8        android:minSdkVersion="26"
+8-->INJECTED
+9        android:targetSdkVersion="37" />
+9-->INJECTED
+10
+11    <uses-feature
+11-->/home/runner/work/PIFuHDC-3D-Viewer/PIFuHDC-3D-Viewer/app/src/main/AndroidManifest.xml:6:5-8:36
+12        android:name="android.hardware.opengles.aep"
+12-->/home/runner/work/PIFuHDC-3D-Viewer/PIFuHDC-3D-Viewer/app/src/main/AndroidManifest.xml:7:9-53
+13        android:required="false" />
+13-->/home/runner/work/PIFuHDC-3D-Viewer/PIFuHDC-3D-Viewer/app/src/main/AndroidManifest.xml:8:9-33
+14
+15    <application
+15-->/home/runner/work/PIFuHDC-3D-Viewer/PIFuHDC-3D-Viewer/app/src/main/AndroidManifest.xml:10:5-37:19
+16        android:allowBackup="true"
+16-->/home/runner/work/PIFuHDC-3D-Viewer/PIFuHDC-3D-Viewer/app/src/main/AndroidManifest.xml:11:9-35
+17        android:debuggable="true"
+18        android:extractNativeLibs="true"
+18-->INJECTED
+19        android:label="@string/app_name"
+19-->/home/runner/work/PIFuHDC-3D-Viewer/PIFuHDC-3D-Viewer/app/src/main/AndroidManifest.xml:12:9-41
+20        android:supportsRtl="true"
+20-->/home/runner/work/PIFuHDC-3D-Viewer/PIFuHDC-3D-Viewer/app/src/main/AndroidManifest.xml:13:9-35
+21        android:theme="@style/AppTheme" >
+21-->/home/runner/work/PIFuHDC-3D-Viewer/PIFuHDC-3D-Viewer/app/src/main/AndroidManifest.xml:14:9-40
+22        <activity
+22-->/home/runner/work/PIFuHDC-3D-Viewer/PIFuHDC-3D-Viewer/app/src/main/AndroidManifest.xml:16:9-35:20
+23            android:name="com.pifuhdc.viewer.MainActivity"
+23-->/home/runner/work/PIFuHDC-3D-Viewer/PIFuHDC-3D-Viewer/app/src/main/AndroidManifest.xml:17:13-41
+24            android:exported="true" >
+24-->/home/runner/work/PIFuHDC-3D-Viewer/PIFuHDC-3D-Viewer/app/src/main/AndroidManifest.xml:18:13-36
+25            <intent-filter>
+25-->/home/runner/work/PIFuHDC-3D-Viewer/PIFuHDC-3D-Viewer/app/src/main/AndroidManifest.xml:20:13-23:29
+26                <action android:name="android.intent.action.MAIN" />
+26-->/home/runner/work/PIFuHDC-3D-Viewer/PIFuHDC-3D-Viewer/app/src/main/AndroidManifest.xml:21:17-69
+26-->/home/runner/work/PIFuHDC-3D-Viewer/PIFuHDC-3D-Viewer/app/src/main/AndroidManifest.xml:21:25-66
+27
+28                <category android:name="android.intent.category.LAUNCHER" />
+28-->/home/runner/work/PIFuHDC-3D-Viewer/PIFuHDC-3D-Viewer/app/src/main/AndroidManifest.xml:22:17-77
+28-->/home/runner/work/PIFuHDC-3D-Viewer/PIFuHDC-3D-Viewer/app/src/main/AndroidManifest.xml:22:27-74
+29            </intent-filter>
+30            <intent-filter>
+30-->/home/runner/work/PIFuHDC-3D-Viewer/PIFuHDC-3D-Viewer/app/src/main/AndroidManifest.xml:25:13-33:29
+31                <action android:name="android.intent.action.VIEW" />
+31-->/home/runner/work/PIFuHDC-3D-Viewer/PIFuHDC-3D-Viewer/app/src/main/AndroidManifest.xml:26:17-69
+31-->/home/runner/work/PIFuHDC-3D-Viewer/PIFuHDC-3D-Viewer/app/src/main/AndroidManifest.xml:26:25-66
+32
+33                <category android:name="android.intent.category.DEFAULT" />
+33-->/home/runner/work/PIFuHDC-3D-Viewer/PIFuHDC-3D-Viewer/app/src/main/AndroidManifest.xml:27:17-76
+33-->/home/runner/work/PIFuHDC-3D-Viewer/PIFuHDC-3D-Viewer/app/src/main/AndroidManifest.xml:27:27-73
+34                <category android:name="android.intent.category.BROWSABLE" />
+34-->/home/runner/work/PIFuHDC-3D-Viewer/PIFuHDC-3D-Viewer/app/src/main/AndroidManifest.xml:28:17-78
+34-->/home/runner/work/PIFuHDC-3D-Viewer/PIFuHDC-3D-Viewer/app/src/main/AndroidManifest.xml:28:27-75
+35
+36                <data android:mimeType="model/gltf-binary" />
+36-->/home/runner/work/PIFuHDC-3D-Viewer/PIFuHDC-3D-Viewer/app/src/main/AndroidManifest.xml:30:17-62
+36-->/home/runner/work/PIFuHDC-3D-Viewer/PIFuHDC-3D-Viewer/app/src/main/AndroidManifest.xml:30:23-59
+37                <data android:mimeType="model/gltf+json" />
+37-->/home/runner/work/PIFuHDC-3D-Viewer/PIFuHDC-3D-Viewer/app/src/main/AndroidManifest.xml:30:17-62
+37-->/home/runner/work/PIFuHDC-3D-Viewer/PIFuHDC-3D-Viewer/app/src/main/AndroidManifest.xml:30:23-59
+38                <data android:mimeType="application/octet-stream" />
+38-->/home/runner/work/PIFuHDC-3D-Viewer/PIFuHDC-3D-Viewer/app/src/main/AndroidManifest.xml:30:17-62
+38-->/home/runner/work/PIFuHDC-3D-Viewer/PIFuHDC-3D-Viewer/app/src/main/AndroidManifest.xml:30:23-59
+39            </intent-filter>
+40        </activity>
+41    </application>
+42
+43</manifest>

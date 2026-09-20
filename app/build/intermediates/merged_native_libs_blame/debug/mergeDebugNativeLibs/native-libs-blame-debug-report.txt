@@ -1,0 +1,12 @@
+lib/arm64-v8a/libfilament-utils-jni.so->com.google.android.filament:filament-utils-android:1.76.1
+lib/armeabi-v7a/libfilament-utils-jni.so->com.google.android.filament:filament-utils-android:1.76.1
+lib/x86/libfilament-utils-jni.so->com.google.android.filament:filament-utils-android:1.76.1
+lib/x86_64/libfilament-utils-jni.so->com.google.android.filament:filament-utils-android:1.76.1
+lib/arm64-v8a/libgltfio-jni.so->com.google.android.filament:gltfio-android:1.76.1
+lib/armeabi-v7a/libgltfio-jni.so->com.google.android.filament:gltfio-android:1.76.1
+lib/x86/libgltfio-jni.so->com.google.android.filament:gltfio-android:1.76.1
+lib/x86_64/libgltfio-jni.so->com.google.android.filament:gltfio-android:1.76.1
+lib/arm64-v8a/libfilament-jni.so->com.google.android.filament:filament-android:1.76.1
+lib/armeabi-v7a/libfilament-jni.so->com.google.android.filament:filament-android:1.76.1
+lib/x86/libfilament-jni.so->com.google.android.filament:filament-android:1.76.1
+lib/x86_64/libfilament-jni.so->com.google.android.filament:filament-android:1.76.1

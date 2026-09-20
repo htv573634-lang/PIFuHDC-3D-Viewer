@@ -1,0 +1,55 @@
+{
+    "logs": [
+        {
+            "outputFile": "com.pifuhdc.viewer.app-debug-4:/values_values.arsc.flat",
+            "map": [
+                {
+                    "source": "/home/runner/work/PIFuHDC-3D-Viewer/PIFuHDC-3D-Viewer/app/src/main/res/values/strings.xml",
+                    "from": {
+                        "startLines": "2",
+                        "startColumns": "4",
+                        "startOffsets": "55",
+                        "endColumns": "54",
+                        "endOffsets": "105"
+                    }
+                },
+                {
+                    "source": "/home/runner/work/PIFuHDC-3D-Viewer/PIFuHDC-3D-Viewer/app/src/main/res/values/styles.xml",
+                    "from": {
+                        "startLines": "3",
+                        "startColumns": "4",
+                        "startOffsets": "56",
+                        "endLines": "11",
+                        "endColumns": "12",
+                        "endOffsets": "339"
+                    },
+                    "to": {
+                        "startLines": "4",
+                        "startColumns": "4",
+                        "startOffsets": "164",
+                        "endLines": "10",
+                        "endColumns": "12",
+                        "endOffsets": "431"
+                    }
+                },
+                {
+                    "source": "/home/runner/.gradle/caches/9.5.1/transforms/4da2c1ce69be3821a2ee1257607f9b7e/transformed/filament-android-1.76.1/res/values/values.xml",
+                    "from": {
+                        "startLines": "2",
+                        "startColumns": "4",
+                        "startOffsets": "55",
+                        "endColumns": "53",
+                        "endOffsets": "104"
+                    },
+                    "to": {
+                        "startLines": "3",
+                        "startColumns": "4",
+                        "startOffsets": "110",
+                        "endColumns": "53",
+                        "endOffsets": "159"
+                    }
+                }
+            ]
+        }
+    ]
+}

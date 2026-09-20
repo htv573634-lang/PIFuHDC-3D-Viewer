@@ -1,0 +1,3 @@
+com.pifuhdc.viewer:style/AppTheme = 0x7f020000
+com.pifuhdc.viewer:string/lib_name = 0x7f010001
+com.pifuhdc.viewer:string/app_name = 0x7f010000

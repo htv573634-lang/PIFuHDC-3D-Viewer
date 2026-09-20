@@ -1,0 +1,3 @@
+com.pifuhdc.viewer
+string app_name
+style AppTheme
