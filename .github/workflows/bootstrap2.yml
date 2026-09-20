@@ -12,24 +12,26 @@ jobs:
 
     steps:
 
-      # ------------------------------------------------------------
-      # 1. Checkout repository
-      # ------------------------------------------------------------
+      # ============================================================
+      # 1. CHECKOUT
+      # ============================================================
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # ------------------------------------------------------------
-      # 2. Java 17
-      # ------------------------------------------------------------
+
+      # ============================================================
+      # 2. JAVA 17
+      # ============================================================
       - name: Setup Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
 
-      # ------------------------------------------------------------
-      # 3. Download Gradle 8.9
-      # ------------------------------------------------------------
+
+      # ============================================================
+      # 3. GRADLE 8.9
+      # ============================================================
       - name: Setup Gradle 8.9
         shell: bash
         run: |
@@ -37,33 +39,74 @@ jobs:
 
           wget -q \
             https://services.gradle.org/distributions/gradle-8.9-bin.zip \
-            -O /tmp/gradle-8.9-bin.zip
+            -O /tmp/gradle.zip
 
-          unzip -q /tmp/gradle-8.9-bin.zip -d /opt
+          unzip -q \
+            /tmp/gradle.zip \
+            -d /opt
 
           echo "/opt/gradle-8.9/bin" >> "$GITHUB_PATH"
 
           gradle --version
 
-      # ------------------------------------------------------------
-      # 4. Create directories
-      # ------------------------------------------------------------
+
+      # ============================================================
+      # 4. CREATE DIRECTORIES
+      # ============================================================
       - name: Create project directories
         shell: bash
         run: |
           set -e
 
+          mkdir -p .github/workflows
+
           mkdir -p app/src/main/java/com/pifuhdc/viewer
           mkdir -p app/src/main/res/values
+
           mkdir -p app/src/main/assets/models
           mkdir -p app/src/main/assets/sample
+
           mkdir -p app/src/main/cpp
+
+          mkdir -p app/libs
 
           mkdir -p gradle/wrapper
 
-      # ------------------------------------------------------------
-      # 5. settings.gradle.kts
-      # ------------------------------------------------------------
+
+      # ============================================================
+      # 5. DOWNLOAD OFFICIAL FILAMENT 1.77.0 AARS
+      # ============================================================
+      - name: Download Filament Android libraries
+        shell: bash
+        run: |
+          set -e
+
+          FILAMENT_VERSION="1.77.0"
+
+          BASE_URL="https://github.com/google/filament/releases/download/v${FILAMENT_VERSION}"
+
+          echo "Downloading Filament ${FILAMENT_VERSION}..."
+
+          wget -q \
+            "${BASE_URL}/filament-v${FILAMENT_VERSION}-android.aar" \
+            -O app/libs/filament.aar
+
+          wget -q \
+            "${BASE_URL}/gltfio-v${FILAMENT_VERSION}-android.aar" \
+            -O app/libs/gltfio.aar
+
+          wget -q \
+            "${BASE_URL}/filament-utils-v${FILAMENT_VERSION}-android.aar" \
+            -O app/libs/filament-utils.aar
+
+          echo ""
+          echo "Downloaded Filament libraries:"
+          ls -lh app/libs/
+
+
+      # ============================================================
+      # 6. SETTINGS
+      # ============================================================
       - name: Write settings.gradle.kts
         shell: bash
         run: |
@@ -79,7 +122,9 @@ jobs:
           }
 
           dependencyResolutionManagement {
-              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+              repositoriesMode.set(
+                  RepositoriesMode.FAIL_ON_PROJECT_REPOS
+              )
 
               repositories {
                   google()
@@ -92,9 +137,10 @@ jobs:
           include(":app")
           EOF
 
-      # ------------------------------------------------------------
-      # 6. Root build.gradle.kts
-      # ------------------------------------------------------------
+
+      # ============================================================
+      # 7. ROOT BUILD
+      # ============================================================
       - name: Write root build.gradle.kts
         shell: bash
         run: |
@@ -105,9 +151,10 @@ jobs:
           }
           EOF
 
-      # ------------------------------------------------------------
-      # 7. gradle.properties
-      # ------------------------------------------------------------
+
+      # ============================================================
+      # 8. GRADLE PROPERTIES
+      # ============================================================
       - name: Write gradle.properties
         shell: bash
         run: |
@@ -117,9 +164,10 @@ jobs:
           kotlin.code.style=official
           EOF
 
-      # ------------------------------------------------------------
-      # 8. app/build.gradle.kts
-      # ------------------------------------------------------------
+
+      # ============================================================
+      # 9. APP BUILD FILE
+      # ============================================================
       - name: Write app/build.gradle.kts
         shell: bash
         run: |
@@ -130,22 +178,29 @@ jobs:
           }
 
           android {
+
               namespace = "com.pifuhdc.viewer"
 
               compileSdk = 35
 
               defaultConfig {
-                  applicationId = "com.pifuhdc.viewer"
+
+                  applicationId =
+                      "com.pifuhdc.viewer"
 
                   minSdk = 26
+
                   targetSdk = 35
 
                   versionCode = 2
+
                   versionName = "0.2.0"
               }
 
               buildTypes {
+
                   release {
+
                       isMinifyEnabled = false
 
                       proguardFiles(
@@ -158,38 +213,52 @@ jobs:
               }
 
               compileOptions {
-                  sourceCompatibility = JavaVersion.VERSION_17
-                  targetCompatibility = JavaVersion.VERSION_17
+
+                  sourceCompatibility =
+                      JavaVersion.VERSION_17
+
+                  targetCompatibility =
+                      JavaVersion.VERSION_17
               }
 
               kotlinOptions {
+
                   jvmTarget = "17"
               }
 
               packaging {
-                  resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
+
+                  resources.excludes +=
+                      "/META-INF/{AL2.0,LGPL2.1}"
               }
           }
 
           dependencies {
 
               implementation(
-                  "com.google.android.filament:filament-android:1.77.0"
+                  files(
+                      "libs/filament.aar"
+                  )
               )
 
               implementation(
-                  "com.google.android.filament:gltfio-android:1.77.0"
+                  files(
+                      "libs/gltfio.aar"
+                  )
               )
 
               implementation(
-                  "com.google.android.filament:filament-utils-android:1.77.0"
+                  files(
+                      "libs/filament-utils.aar"
+                  )
               )
           }
           EOF
 
-      # ------------------------------------------------------------
-      # 9. AndroidManifest.xml
-      # ------------------------------------------------------------
+
+      # ============================================================
+      # 10. MANIFEST
+      # ============================================================
       - name: Write AndroidManifest.xml
         shell: bash
         run: |
@@ -211,17 +280,30 @@ jobs:
                       android:exported="true">
 
                       <intent-filter>
-                          <action android:name="android.intent.action.MAIN" />
-                          <category android:name="android.intent.category.LAUNCHER" />
+
+                          <action
+                              android:name="android.intent.action.MAIN" />
+
+                          <category
+                              android:name="android.intent.category.LAUNCHER" />
+
                       </intent-filter>
 
+
                       <intent-filter>
-                          <action android:name="android.intent.action.VIEW" />
 
-                          <category android:name="android.intent.category.DEFAULT" />
-                          <category android:name="android.intent.category.BROWSABLE" />
+                          <action
+                              android:name="android.intent.action.VIEW" />
 
-                          <data android:mimeType="model/gltf-binary" />
+                          <category
+                              android:name="android.intent.category.DEFAULT" />
+
+                          <category
+                              android:name="android.intent.category.BROWSABLE" />
+
+                          <data
+                              android:mimeType="model/gltf-binary" />
+
                       </intent-filter>
 
                   </activity>
@@ -231,9 +313,10 @@ jobs:
           </manifest>
           EOF
 
-      # ------------------------------------------------------------
-      # 10. strings.xml
-      # ------------------------------------------------------------
+
+      # ============================================================
+      # 11. STRINGS
+      # ============================================================
       - name: Write strings.xml
         shell: bash
         run: |
@@ -249,9 +332,10 @@ jobs:
           </resources>
           EOF
 
-      # ------------------------------------------------------------
-      # 11. styles.xml
-      # ------------------------------------------------------------
+
+      # ============================================================
+      # 12. STYLE
+      # ============================================================
       - name: Write styles.xml
         shell: bash
         run: |
@@ -264,7 +348,9 @@ jobs:
                   name="AppTheme"
                   parent="android:style/Theme.Material.Light.NoActionBar">
 
-                  <item name="android:fontFamily">sans</item>
+                  <item name="android:fontFamily">
+                      sans
+                  </item>
 
                   <item name="android:statusBarColor">
                       #000000
@@ -283,20 +369,21 @@ jobs:
           </resources>
           EOF
 
-      # ------------------------------------------------------------
-      # 12. proguard-rules.pro
-      # ------------------------------------------------------------
+
+      # ============================================================
+      # 13. PROGUARD
+      # ============================================================
       - name: Write proguard-rules.pro
         shell: bash
         run: |
           cat > app/proguard-rules.pro <<'EOF'
           # PIFuHDC 3D Viewer
-          # Bootstrap 2
           EOF
 
-      # ------------------------------------------------------------
-      # 13. MainActivity.kt
-      # ------------------------------------------------------------
+
+      # ============================================================
+      # 14. MAIN ACTIVITY
+      # ============================================================
       - name: Write MainActivity.kt
         shell: bash
         run: |
@@ -322,10 +409,12 @@ jobs:
           class MainActivity : Activity() {
 
               private lateinit var modelViewer: ModelViewer
+
               private lateinit var statusText: TextView
 
               private val choreographer =
                   Choreographer.getInstance()
+
 
               private val frameCallback =
                   object : Choreographer.FrameCallback {
@@ -333,11 +422,17 @@ jobs:
                       override fun doFrame(
                           frameTimeNanos: Long
                       ) {
+
                           if (::modelViewer.isInitialized) {
-                              modelViewer.render(frameTimeNanos)
+
+                              modelViewer.render(
+                                  frameTimeNanos
+                              )
                           }
 
-                          choreographer.postFrameCallback(this)
+                          choreographer.postFrameCallback(
+                              this
+                          )
                       }
                   }
 
@@ -345,7 +440,10 @@ jobs:
               override fun onCreate(
                   savedInstanceState: Bundle?
               ) {
-                  super.onCreate(savedInstanceState)
+
+                  super.onCreate(
+                      savedInstanceState
+                  )
 
                   createViewerUi()
 
@@ -357,6 +455,7 @@ jobs:
 
                   val root =
                       LinearLayout(this).apply {
+
                           orientation =
                               LinearLayout.VERTICAL
                       }
@@ -364,6 +463,7 @@ jobs:
 
                   val controls =
                       LinearLayout(this).apply {
+
                           orientation =
                               LinearLayout.HORIZONTAL
 
@@ -379,9 +479,11 @@ jobs:
                   val openButton =
                       Button(this).apply {
 
-                          text = "Open GLB"
+                          text =
+                              "Open GLB"
 
                           setOnClickListener {
+
                               openGlbPicker()
                           }
                       }
@@ -427,7 +529,9 @@ jobs:
 
 
                   modelViewer =
-                      ModelViewer(textureView)
+                      ModelViewer(
+                          textureView
+                      )
 
 
                   textureView.setOnTouchListener(
@@ -459,6 +563,7 @@ jobs:
 
 
               override fun onResume() {
+
                   super.onResume()
 
                   choreographer.postFrameCallback(
@@ -484,6 +589,7 @@ jobs:
                   )
 
                   if (::modelViewer.isInitialized) {
+
                       modelViewer.destroy()
                   }
 
@@ -494,10 +600,13 @@ jobs:
               override fun onNewIntent(
                   intent: Intent?
               ) {
+
                   super.onNewIntent(intent)
 
                   if (intent != null) {
+
                       setIntent(intent)
+
                       handleIntent(intent)
                   }
               }
@@ -506,7 +615,9 @@ jobs:
               private fun openGlbPicker() {
 
                   val intent =
-                      Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                      Intent(
+                          Intent.ACTION_OPEN_DOCUMENT
+                      ).apply {
 
                           addCategory(
                               Intent.CATEGORY_OPENABLE
@@ -532,7 +643,7 @@ jobs:
 
 
               @Deprecated(
-                  "Using Activity Result API is unnecessary for Bootstrap 2."
+                  "Bootstrap 2"
               )
               override fun onActivityResult(
                   requestCode: Int,
@@ -548,15 +659,16 @@ jobs:
 
 
                   if (
-                      requestCode == REQUEST_GLB &&
-                      resultCode == RESULT_OK
+                      requestCode ==
+                          REQUEST_GLB
+                      &&
+                      resultCode ==
+                          RESULT_OK
                   ) {
 
-                      val uri =
-                          data?.data
+                      data?.data?.let {
 
-                      if (uri != null) {
-                          loadGlb(uri)
+                          loadGlb(it)
                       }
                   }
               }
@@ -594,16 +706,18 @@ jobs:
                           contentResolver
                               .openInputStream(uri)
                               ?.use {
+
                                   it.readBytes()
                               }
                               ?: throw IllegalStateException(
-                                  "Unable to open GLB file"
+                                  "Unable to open GLB"
                               )
 
 
                       if (bytes.size < 12) {
+
                           throw IllegalArgumentException(
-                              "File is too small to be a valid GLB"
+                              "File too small"
                           )
                       }
 
@@ -620,25 +734,23 @@ jobs:
                       if (magic != "glTF") {
 
                           throw IllegalArgumentException(
-                              "Selected file is not a GLB file"
+                              "Not a valid GLB file"
                           )
                       }
 
 
                       val sizeMb =
-                          bytes.size / 1024 / 1024
+                          bytes.size /
+                              1024 /
+                              1024
 
 
                       statusText.text =
                           "Loading ${sizeMb} MB GLB..."
 
 
-                      val buffer =
-                          ByteBuffer.wrap(bytes)
-
-
                       modelViewer.loadModelGlb(
-                          buffer
+                          ByteBuffer.wrap(bytes)
                       )
 
 
@@ -672,9 +784,10 @@ jobs:
           }
           EOF
 
-      # ------------------------------------------------------------
-      # 14. Placeholder directories/files
-      # ------------------------------------------------------------
+
+      # ============================================================
+      # 15. PLACEHOLDERS
+      # ============================================================
       - name: Create placeholder files
         shell: bash
         run: |
@@ -682,33 +795,43 @@ jobs:
           touch app/src/main/assets/sample/.gitkeep
           touch app/src/main/cpp/.gitkeep
 
-      # ------------------------------------------------------------
-      # 15. Generate Gradle wrapper
-      # ------------------------------------------------------------
+
+      # ============================================================
+      # 16. GENERATE GRADLE WRAPPER
+      # ============================================================
       - name: Generate Gradle wrapper
         shell: bash
         run: |
           set -e
 
-          gradle wrapper --gradle-version 8.9
+          gradle wrapper \
+            --gradle-version 8.9
 
           chmod +x gradlew
 
-      # ------------------------------------------------------------
-      # 16. Show project tree
-      # ------------------------------------------------------------
-      - name: Show project tree
+
+      # ============================================================
+      # 17. VERIFY FILAMENT FILES
+      # ============================================================
+      - name: Verify Filament libraries
         shell: bash
         run: |
-          find . \
-            -maxdepth 6 \
-            -type f \
-            -not -path "./.git/*" \
-            | sort
+          set -e
 
-      # ------------------------------------------------------------
-      # 17. Build Debug APK
-      # ------------------------------------------------------------
+          echo "Filament libraries:"
+
+          ls -lh app/libs/
+
+          test -s app/libs/filament.aar
+          test -s app/libs/gltfio.aar
+          test -s app/libs/filament-utils.aar
+
+          echo "All Filament AARs are present."
+
+
+      # ============================================================
+      # 18. BUILD
+      # ============================================================
       - name: Build Debug APK
         shell: bash
         run: |
@@ -719,9 +842,10 @@ jobs:
             --stacktrace \
             --no-daemon
 
-      # ------------------------------------------------------------
-      # 18. Check APK
-      # ------------------------------------------------------------
+
+      # ============================================================
+      # 19. CHECK APK
+      # ============================================================
       - name: Check APK
         shell: bash
         run: |
@@ -730,9 +854,10 @@ jobs:
           ls -lh \
             app/build/outputs/apk/debug/app-debug.apk
 
-      # ------------------------------------------------------------
-      # 19. Upload APK artifact
-      # ------------------------------------------------------------
+
+      # ============================================================
+      # 20. UPLOAD APK
+      # ============================================================
       - name: Upload Debug APK
         uses: actions/upload-artifact@v4
         with:
@@ -740,9 +865,10 @@ jobs:
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
 
-      # ------------------------------------------------------------
-      # 20. Commit Bootstrap 2 project
-      # ------------------------------------------------------------
+
+      # ============================================================
+      # 21. COMMIT PROJECT
+      # ============================================================
       - name: Commit Bootstrap 2 project
         shell: bash
         run: |
@@ -757,9 +883,14 @@ jobs:
           git add .
 
           if git diff --cached --quiet; then
+
               echo "No changes to commit."
+
           else
+
               git commit \
                 -m "Bootstrap Android GLB viewer"
+
               git push
+
           fi
