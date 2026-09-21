@@ -1,12 +1,13 @@
 plugins {
     id("com.android.application")
+    id("org.jetbrains.kotlin.android")
+    id("org.jetbrains.kotlin.plugin.compose")
 }
 
 android {
     namespace = "com.pifuhdc.viewer"
 
     compileSdk = 37
-    compileSdkMinor = 0
 
     defaultConfig {
         applicationId = "com.pifuhdc.viewer"
@@ -21,10 +22,13 @@ android {
             isMinifyEnabled = false
             isShrinkResources = false
         }
-
         debug {
             isMinifyEnabled = false
         }
+    }
+
+    buildFeatures {
+        compose = true
     }
 
     compileOptions {
@@ -36,7 +40,6 @@ android {
         jniLibs {
             useLegacyPackaging = true
         }
-
         resources {
             excludes += setOf(
                 "META-INF/AL2.0",
@@ -52,7 +55,5 @@ kotlin {
 }
 
 dependencies {
-    implementation(
-        "io.github.sceneview:sceneview:4.37.0"
-    )
+    implementation("io.github.sceneview:sceneview:4.37.0")
 }
