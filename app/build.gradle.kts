@@ -1,6 +1,7 @@
 plugins {
     id("com.android.application")
-    id("org.jetbrains.kotlin.android")
+    // REMOVED: id("org.jetbrains.kotlin.android") 
+    // AGP now handles Kotlin automatically for app modules.
 }
 
 android {
@@ -15,29 +16,29 @@ android {
         versionName = "1.0"
     }
 
-    // Enable Jetpack Compose
     buildFeatures {
         compose = true
     }
 
     composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.1" // Match this to your Kotlin version
+        kotlinCompilerExtensionVersion = "1.5.1" // Ensure this matches your Kotlin version
     }
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
+    
     kotlinOptions {
         jvmTarget = "17"
     }
 }
 
 dependencies {
-    // SceneView (includes Filament rendering engine under the hood)
+    // SceneView (includes Filament rendering engine)
     implementation("io.github.sceneview:sceneview:4.37.0")
     
-    // Jetpack Compose dependencies
+    // Jetpack Compose & Core dependencies
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")
     implementation("androidx.activity:activity-compose:1.8.2")
