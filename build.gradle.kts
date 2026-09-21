@@ -1,17 +1,8 @@
-buildscript {
-    repositories {
-        google()
-        mavenCentral()
-        gradlePluginPortal()
-    }
-
-    dependencies {
-        classpath(
-            "org.jetbrains.kotlin:kotlin-gradle-plugin:2.4.20"
-        )
-    }
-}
-
 plugins {
-    id("com.android.application") version "9.3.3" apply false
+    // Android Application plugin (keep your version, e.g., 8.3.3 or 9.x.x)
+    id("com.android.application") version "8.3.3" apply false 
+    
+    // Kotlin plugin declared here with 'apply false' makes it available globally 
+    // without triggering the "no longer required in app module" error.
+    id("org.jetbrains.kotlin.android") version "2.0.0" apply false 
 }
