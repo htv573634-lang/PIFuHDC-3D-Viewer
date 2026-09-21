@@ -1,7 +1,7 @@
 plugins {
-    id("com.android.application") version "8.13.0"
-    id("org.jetbrains.kotlin.android") version "2.2.20"
-    id("org.jetbrains.kotlin.plugin.compose") version "2.2.20"
+    id("com.android.application")
+    id("org.jetbrains.kotlin.android")
+    id("org.jetbrains.kotlin.plugin.compose")
 }
 
 android {
@@ -22,7 +22,6 @@ android {
             isMinifyEnabled = false
             isShrinkResources = false
         }
-
         debug {
             isMinifyEnabled = false
         }
@@ -32,24 +31,19 @@ android {
         compose = true
     }
 
-    composeOptions {
-        kotlinCompilerExtensionVersion = "2.2.20"
-    }
-
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    kotlinOptions {
-        jvmTarget = "17"
+    kotlin {
+        jvmToolchain(17)
     }
 
     packaging {
         jniLibs {
             useLegacyPackaging = true
         }
-
         resources {
             excludes += setOf(
                 "META-INF/AL2.0",
