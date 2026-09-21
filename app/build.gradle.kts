@@ -1,13 +1,12 @@
 plugins {
     id("com.android.application")
-    id("org.jetbrains.kotlin.android")
-    id("org.jetbrains.kotlin.plugin.compose")
 }
 
 android {
     namespace = "com.pifuhdc.viewer"
 
     compileSdk = 37
+    compileSdkMinor = 0
 
     defaultConfig {
         applicationId = "com.pifuhdc.viewer"
@@ -22,13 +21,10 @@ android {
             isMinifyEnabled = false
             isShrinkResources = false
         }
+
         debug {
             isMinifyEnabled = false
         }
-    }
-
-    buildFeatures {
-        compose = true
     }
 
     compileOptions {
@@ -36,14 +32,11 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    kotlin {
-        jvmToolchain(17)
-    }
-
     packaging {
         jniLibs {
             useLegacyPackaging = true
         }
+
         resources {
             excludes += setOf(
                 "META-INF/AL2.0",
@@ -54,15 +47,12 @@ android {
     }
 }
 
+kotlin {
+    jvmToolchain(17)
+}
+
 dependencies {
-    implementation("androidx.core:core-ktx:1.17.0")
-    implementation("androidx.activity:activity-compose:1.11.0")
-
-    implementation(platform("androidx.compose:compose-bom:2026.01.00"))
-    implementation("androidx.compose.ui:ui")
-    implementation("androidx.compose.material3:material3")
-    implementation("androidx.compose.ui:ui-tooling-preview")
-    debugImplementation("androidx.compose.ui:ui-tooling")
-
-    implementation("io.github.sceneview:sceneview:4.37.0")
+    implementation(
+        "io.github.sceneview:sceneview:4.37.0"
+    )
 }
